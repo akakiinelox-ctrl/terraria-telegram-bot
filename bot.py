@@ -4,9 +4,9 @@ import os
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# =====================
+# =========================
 # НАСТРОЙКИ
-# =====================
+# =========================
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,11 +17,11 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# =====================
+# =========================
 # ЗАГРУЗКА ДАННЫХ
-# =====================
+# =========================
 
-def load_json(path):
+def load_json(path: str) -> dict:
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
@@ -29,10 +29,30 @@ def load_json(path):
         logging.error(f"Ошибка загрузки {path}: {e}")
         return {}
 
-def bosses_menu():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+DATA = load_json("data/bosses.json")
+BOSSES = DATA.get("pre_hardmode", {})
 
-    boss_icons = {
+# =========================
+# СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЯ
+# =========================
+
+user_selected_boss = {}
+
+# =========================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# =========================
+
+def difficulty_icon(text: str) -> str:
+    if "Лёг" in text:
+        return "🟢"
+    if "Сред" in text:
+        return "🟡"
+    if "Слож" in text:
+        return "🔴"
+    return "⚪"
+
+def boss_visual_icon(name: str) -> str:
+    icons = {
         "Король слизней": "👑",
         "Глаз Ктулху": "👁",
         "Пожиратель миров": "🐛",
@@ -41,41 +61,33 @@ def bosses_menu():
         "Скелетрон": "💀",
         "Стена плоти": "🔥"
     }
+    return icons.get(name, "👁")
 
-    for boss in BOSSES.values():
-        diff = boss.get("difficulty", "")
-        if "Лёг" in diff:
-            diff_icon = "🟢"
-        elif "Сред" in diff:
-            diff_icon = "🟡"
-        elif "Слож" in diff:
-            diff_icon = "🔴"
-        else:
-            diff_icon = "⚪"
+# =========================
+# КЛАВИАТУРЫ
+# =========================
 
-        name = boss["name"]
-        icon = boss_icons.get(name, "👁")
-
-        kb.add(KeyboardButton(f"{diff_icon} {icon} {name}"))
-
+def main_menu():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(
-        KeyboardButton("⬅️ Назад"),
-        KeyboardButton("🏠 Главное меню")
+        KeyboardButton("👁 Боссы"),
+        KeyboardButton("ℹ️ О боте")
     )
     return kb
 
 def bosses_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     for boss in BOSSES.values():
-        icon = difficulty_icon(boss.get("difficulty", ""))
-        kb.add(KeyboardButton(f"{icon} {boss['name']}"))
+        diff = difficulty_icon(boss.get("difficulty", ""))
+        icon = boss_visual_icon(boss["name"])
+        kb.add(KeyboardButton(f"{diff} {icon} {boss['name']}"))
     kb.add(
         KeyboardButton("⬅️ Назад"),
         KeyboardButton("🏠 Главное меню")
     )
     return kb
 
-def boss_sections():
+def boss_sections_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(
         KeyboardButton("⚠️ Угрозы"),
@@ -94,60 +106,69 @@ def boss_sections():
     )
     return kb
 
-# =====================
+# =========================
 # ХЕНДЛЕРЫ
-# =====================
+# =========================
 
 @dp.message_handler(commands=["start"])
-async def start(message: types.Message):
+async def cmd_start(message: types.Message):
     await message.answer(
         "🎮 Terraria Guide Bot\n\n"
         "Справочник по боссам Terraria.\n"
+        "Вся информация — по делу и с объяснениями.\n\n"
         "Выбирай кнопками 👇",
         reply_markup=main_menu()
     )
 
 @dp.message_handler(lambda m: m.text == "🏠 Главное меню")
-async def home(message):
+async def go_home(message: types.Message):
     await message.answer("Главное меню:", reply_markup=main_menu())
 
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
-async def show_bosses(message):
+async def show_bosses(message: types.Message):
     await message.answer(
         "👁 Боссы (Дохардмод)\n\n"
-        "🟢 Лёгкий  🟡 Средний  🔴 Сложный",
+        "🟢 Лёгкий   🟡 Средний   🔴 Сложный\n"
+        "Иконка рядом с именем — тип босса.",
         reply_markup=bosses_menu()
     )
 
 @dp.message_handler(lambda m: m.text == "⬅️ Назад")
-async def back(message):
+async def back_to_menu(message: types.Message):
     await message.answer("Главное меню:", reply_markup=main_menu())
 
 @dp.message_handler(lambda m: m.text == "⬅️ К боссам")
-async def back_to_bosses(message):
+async def back_to_bosses(message: types.Message):
     await message.answer("Выбери босса:", reply_markup=bosses_menu())
 
-@dp.message_handler(lambda m: any(b["name"] in m.text for b in BOSSES.values()))
-async def select_boss(message):
+@dp.message_handler(lambda m: any(boss["name"] in m.text for boss in BOSSES.values()))
+async def select_boss(message: types.Message):
     for boss in BOSSES.values():
         if boss["name"] in message.text:
-            user_boss[message.from_user.id] = boss
-            icon = difficulty_icon(boss.get("difficulty", ""))
+            user_selected_boss[message.from_user.id] = boss
+            diff = difficulty_icon(boss.get("difficulty", ""))
+            icon = boss_visual_icon(boss["name"])
             await message.answer(
-                f"{icon} {boss['name']}\n"
+                f"{diff} {icon} {boss['name']}\n"
                 f"{boss['stage']}\n\n"
                 "Выбери раздел:",
-                reply_markup=boss_sections()
+                reply_markup=boss_sections_menu()
             )
             return
 
 @dp.message_handler(lambda m: m.text in [
-    "⚠️ Угрозы", "📋 Минимум", "🛡 Броня и ресурсы", "⚔️ Оружие",
-    "🏗 Арена", "🎯 Поведение и урон", "❌ Ошибки",
-    "🆘 Если сложно", "➡️ Зачем убивать"
+    "⚠️ Угрозы",
+    "📋 Минимум",
+    "🛡 Броня и ресурсы",
+    "⚔️ Оружие",
+    "🏗 Арена",
+    "🎯 Поведение и урон",
+    "❌ Ошибки",
+    "🆘 Если сложно",
+    "➡️ Зачем убивать"
 ])
-async def show_section(message):
-    boss = user_boss.get(message.from_user.id)
+async def show_boss_section(message: types.Message):
+    boss = user_selected_boss.get(message.from_user.id)
     if not boss:
         await message.answer("Сначала выбери босса.", reply_markup=main_menu())
         return
@@ -169,22 +190,33 @@ async def show_section(message):
         "➡️ Зачем убивать": boss["progression_value"]
     }
 
-    text = section_map.get(message.text, "Нет данных")
+    text = section_map.get(message.text, "Нет данных.")
     await message.answer(
         f"{message.text} — {boss['name']}\n\n{text}",
-        reply_markup=boss_sections()
+        reply_markup=boss_sections_menu()
     )
 
-@dp.message_handler()
-async def fallback(message):
+@dp.message_handler(lambda m: m.text == "ℹ️ О боте")
+async def about_bot(message: types.Message):
     await message.answer(
-        "Используй кнопки 👇",
+        "ℹ️ О боте\n\n"
+        "• Это справочник по Terraria\n"
+        "• Все гайды объясняют «зачем и почему»\n"
+        "• Информация основана на vanilla Terraria 1.4.x\n\n"
+        "Используй кнопки — так удобнее 🙂",
         reply_markup=main_menu()
     )
 
-# =====================
+@dp.message_handler()
+async def fallback(message: types.Message):
+    await message.answer(
+        "Используй кнопки ниже 👇",
+        reply_markup=main_menu()
+    )
+
+# =========================
 # ЗАПУСК
-# =====================
+# =========================
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
