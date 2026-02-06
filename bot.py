@@ -22,14 +22,15 @@ def main_menu():
     )
 
 def bosses_stage_menu():
-    return types.ReplyKeyboardMarkup(resize_keyboard=True).add(
-        "🌱 Начало приключения",
-        "⬅ Назад"
-    )
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("🌱 Начало приключения")
+    kb.add("⚙️ Хардмод")
+    kb.add("⬅ Назад")
+    return kb
 
 def bosses_list(stage):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    for key, boss in BOSSES.items():
+    for boss in BOSSES.values():
         if boss["stage"] == stage:
             kb.add(boss["name"])
     kb.add("⬅ Назад")
@@ -78,6 +79,14 @@ async def pre_hardmode(m: types.Message):
         reply_markup=bosses_list("Дохардмод")
     )
 
+@dp.message_handler(lambda m: m.text == "⚙️ Хардмод")
+async def hardmode(m: types.Message):
+    user_state[m.from_user.id]["menu"] = "boss_list"
+    await m.answer(
+        "⚙️ Хардмод — боссы:",
+        reply_markup=bosses_list("Хардмод")
+    )
+
 @dp.message_handler(lambda m: m.text in [b["name"] for b in BOSSES.values()])
 async def select_boss(m: types.Message):
     for key, boss in BOSSES.items():
@@ -118,7 +127,7 @@ async def boss_section(m: types.Message):
 
 @dp.message_handler(lambda m: m.text == "⬅ К списку боссов")
 async def back_to_bosses(m: types.Message):
-    await pre_hardmode(m)
+    await bosses(m)
 
 @dp.message_handler(lambda m: m.text == "🏠 Главное меню" or m.text == "⬅ Назад")
 async def back(m: types.Message):
