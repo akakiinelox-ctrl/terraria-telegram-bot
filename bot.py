@@ -2,16 +2,24 @@ import json
 import logging
 from aiogram import Bot, Dispatcher, executor, types
 
-API_TOKEN = "8513031435:AAHfTK010ez5t5rYBXx5FxO5l-xRHZ8wZew"
+API_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# ---------- LOAD BOSSES ----------
+# ---------- LOAD DATA ----------
 with open("data/bosses.json", "r", encoding="utf-8") as f:
     BOSSES = json.load(f)
+
+# ---------- DIFFICULTY ICONS ----------
+DIFFICULTY_ICONS = {
+    "Лёгкий": "🟢",
+    "Средний": "🟡",
+    "Сложный": "🔴",
+    "Очень сложный": "🔥"
+}
 
 # ---------- KEYBOARDS ----------
 
@@ -24,7 +32,8 @@ def main_menu_kb():
 def bosses_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for boss in BOSSES.values():
-        kb.add(boss["name"])
+        diff_icon = DIFFICULTY_ICONS.get(boss["difficulty"], "⚔️")
+        kb.add(f"{diff_icon} {boss['name']}")
     kb.add("🏠 Главное меню")
     return kb
 
@@ -68,17 +77,19 @@ async def show_bosses(message: types.Message):
     await message.answer("👁 Выбери босса:", reply_markup=bosses_kb())
 
 
-@dp.message_handler(lambda m: m.text in [b["name"] for b in BOSSES.values()])
+@dp.message_handler(lambda m: any(m.text.endswith(b["name"]) for b in BOSSES.values()))
 async def select_boss(message: types.Message):
     for key, boss in BOSSES.items():
-        if message.text == boss["name"]:
+        if message.text.endswith(boss["name"]):
             user_current_boss[message.from_user.id] = key
+            icon = DIFFICULTY_ICONS.get(boss["difficulty"], "⚔️")
             await message.answer(
-                f"{boss['name']}\n\n"
-                f"⚔️ Сложность: {boss['difficulty']}\n"
+                f"{icon} **{boss['name']}**\n\n"
+                f"{icon} Сложность: {boss['difficulty']}\n"
                 f"🧱 Этап: {boss['stage']}\n\n"
                 f"Выбери раздел гайда 👇",
-                reply_markup=boss_sections_kb()
+                reply_markup=boss_sections_kb(),
+                parse_mode="Markdown"
             )
             return
 
@@ -104,21 +115,23 @@ async def show_section(message: types.Message):
     boss = BOSSES[user_current_boss[uid]]
     sections = boss["sections"]
 
+    if message.text == "⚔️ Сложность и этап":
+        icon = DIFFICULTY_ICONS.get(boss["difficulty"], "⚔️")
+        await message.answer(
+            f"{icon} **Сложность:** {boss['difficulty']}\n"
+            f"🧱 **Этап:** {boss['stage']}",
+            parse_mode="Markdown"
+        )
+        return
+
     mapping = {
         "🔰 Подготовка": "preparation",
         "🏗️ Арена": "arena",
         "⚔️ Оружие": "weapons",
         "🧠 Тактика": "tactics",
         "⚠️ Опасности": "dangers",
-        "🎁 Зачем убивать": "why_kill",
+        "🎁 Зачем убивать": "why_kill"
     }
-
-    if message.text == "⚔️ Сложность и этап":
-        await message.answer(
-            f"⚔️ Сложность: {boss['difficulty']}\n"
-            f"🧱 Этап: {boss['stage']}"
-        )
-        return
 
     key = mapping.get(message.text)
     if key and key in sections:
