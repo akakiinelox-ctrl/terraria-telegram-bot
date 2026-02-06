@@ -1,206 +1,108 @@
-import asyncio
+import json
+import logging
 import os
+from aiogram import Bot, Dispatcher, executor, types
+from keyboards import main_menu, bosses_menu
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-
-# =====================
-# ИНИЦИАЛИЗАЦИЯ
-# =====================
+logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN не найден")
-
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(bot)
 
-# =====================
-# КНОПКИ
-# =====================
+def load_json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
-main_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🟢 Дохардмод", callback_data="prehard")],
-    [InlineKeyboardButton(text="🔥 Хардмод (скоро)", callback_data="hard_stub")],
-    [InlineKeyboardButton(text="📘 Общие советы (скоро)", callback_data="guide_stub")]
-])
+BOSSES = load_json("data/bosses.json")
+PROGRESSION = load_json("data/progression.json")
 
-prehard_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="👁 Глаз Ктулху", callback_data="eye")],
-    [InlineKeyboardButton(text="🐝 Королева пчёл", callback_data="bee")],
-    [InlineKeyboardButton(text="💀 Скелетрон", callback_data="skeletron")],
-    [InlineKeyboardButton(text="🧱 Стена плоти", callback_data="wall")],
-    [InlineKeyboardButton(text="⬅ Назад", callback_data="back")]
-])
+# ---------- START ----------
 
-# =====================
-# /start
-# =====================
-
-@dp.message(CommandStart())
+@dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     await message.answer(
-        "🎮 **Terraria Guide Bot**\n\n"
-        "Полноценные гайды по прогрессии Terraria.\n\n"
-        "Выбери этап игры:",
-        reply_markup=main_menu,
-        parse_mode="Markdown"
+        "🎮 Terraria Guide Bot\n\n"
+        "Полные гайды по Terraria.\n"
+        "Используй кнопки 👇",
+        reply_markup=main_menu
     )
 
-# =====================
-# НАВИГАЦИЯ
-# =====================
+# ---------- MAIN MENU ----------
 
-@dp.callback_query(lambda c: c.data == "prehard")
-async def open_prehard(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🟢 **Дохардмод**\n\n"
-        "Боссы до Хардмода:",
-        reply_markup=prehard_menu,
-        parse_mode="Markdown"
+@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
+async def go_home(message: types.Message):
+    await message.answer("Главное меню:", reply_markup=main_menu)
+
+@dp.message_handler(lambda m: m.text == "👁 Боссы")
+async def show_bosses(message: types.Message):
+    await message.answer(
+        "Выбери босса:",
+        reply_markup=bosses_menu(list(BOSSES.keys()))
     )
 
-@dp.callback_query(lambda c: c.data == "back")
-async def back(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🎮 **Terraria Guide Bot**\n\nВыбери этап:",
-        reply_markup=main_menu,
-        parse_mode="Markdown"
+@dp.message_handler(lambda m: m.text == "📘 Прогрессия")
+async def show_progression(message: types.Message):
+    text = "📘 Прогрессия Terraria\n\n"
+    for stage, bosses in PROGRESSION.items():
+        text += f"🔹 {stage}\n"
+        for b in bosses:
+            text += f"• {b}\n"
+        text += "\n"
+
+    await message.answer(text, reply_markup=main_menu)
+
+@dp.message_handler(lambda m: m.text == "ℹ️ О боте")
+async def about(message: types.Message):
+    await message.answer(
+        "🤖 Terraria Guide Bot\n\n"
+        "• Каноничные гайды\n"
+        "• Без ручного ввода\n"
+        "• Удобные кнопки\n"
+        "• Сделано фанатом Terraria",
+        reply_markup=main_menu
     )
 
-# =====================
-# ГЛАЗ КТУЛХУ
-# =====================
+# ---------- BOSSES ----------
 
-@dp.callback_query(lambda c: c.data == "eye")
-async def eye(callback: CallbackQuery):
-    await callback.message.answer(
-        "👁 **Глаз Ктулху**\n\n"
-        "**Описание:**\n"
-        "Первый серьёзный босс Terraria. Проверяет мобильность и подготовку игрока.\n\n"
+@dp.message_handler(lambda m: m.text in BOSSES)
+async def boss_guide(message: types.Message):
+    b = BOSSES[message.text]
 
-        "**Условия появления:**\n"
-        "• Использовать *Глаз подозрения* ночью\n"
-        "• Может появиться сам при 200+ HP и 10+ защиты\n\n"
-
-        "**Подготовка:**\n"
-        "• Арена из 2–3 рядов платформ\n"
-        "• Зелья: скорость, регенерация, железная кожа\n"
-        "• Обувь с ускорением\n\n"
-
-        "**Оружие по классам:**\n"
-        "🗡 Воин: Зачарованный бумеранг\n"
-        "🏹 Стрелок: Лук + огненные стрелы\n"
-        "🔮 Маг: Самоцветный посох\n"
-        "🐲 Призыватель: Посох слизи\n\n"
-
-        "**Тактика боя:**\n"
-        "1. Первая фаза — уклоняйся и стреляй\n"
-        "2. Вторая фаза — агрессивные рывки\n"
-        "3. Никогда не стой на месте\n\n"
-
-        "**Частые ошибки:**\n"
-        "• Бой без арены\n"
-        "• Недостаток скорости\n\n"
-
-        "**Награды:**\n"
-        "• Демонитовая/Кримтановая руда\n"
-        "• Материалы для снаряжения\n\n"
-
-        "**После победы:**\n"
-        "➡ Открывается путь к следующим боссам",
-        parse_mode="Markdown"
+    text = (
+        f"👁 {message.text}\n\n"
+        f"📍 Стадия: {b['stage']}\n"
+        f"❤️ HP: {b['hp']}\n\n"
+        f"🌀 Призыв:\n{b['summon']}\n\n"
+        f"🏗 Арена:\n{b['arena']}\n\n"
+        f"⚔️ Тактика:\n{b['strategy']}\n\n"
+        f"🎁 Дроп:\n{b['drops']}"
     )
 
-# =====================
-# КОРОЛЕВА ПЧЁЛ
-# =====================
-
-@dp.callback_query(lambda c: c.data == "bee")
-async def bee(callback: CallbackQuery):
-    await callback.message.answer(
-        "🐝 **Королева пчёл**\n\n"
-        "**Описание:**\n"
-        "Опасный босс джунглей, атакующий роем и ядом.\n\n"
-
-        "**Призыв:**\n"
-        "• Уничтожить личинку в улье\n\n"
-
-        "**Подготовка:**\n"
-        "• Арена в улье или снаружи\n"
-        "• Защита от яда обязательна\n\n"
-
-        "**Тактика:**\n"
-        "• Средняя дистанция\n"
-        "• Уклонение важнее урона\n\n"
-
-        "**Награды:**\n"
-        "• Пчелиные предметы\n"
-        "• Доступ к Слизневой королеве позже",
-        parse_mode="Markdown"
+    await message.answer(
+        text,
+        reply_markup=bosses_menu(list(BOSSES.keys()))
     )
 
-# =====================
-# СКЕЛЕТРОН
-# =====================
+# ---------- BACK ----------
 
-@dp.callback_query(lambda c: c.data == "skeletron")
-async def skeletron(callback: CallbackQuery):
-    await callback.message.answer(
-        "💀 **Скелетрон**\n\n"
-        "**Описание:**\n"
-        "Хранитель Данжа. Быстрый и смертельно опасный.\n\n"
-
-        "**Призыв:**\n"
-        "• Поговорить со Стариком ночью\n\n"
-
-        "**Тактика:**\n"
-        "• Сначала уничтожить руки\n"
-        "• Высокая мобильность\n\n"
-
-        "**После победы:**\n"
-        "➡ Открывается Данж",
-        parse_mode="Markdown"
+@dp.message_handler(lambda m: m.text == "⬅️ Назад")
+async def back_to_bosses(message: types.Message):
+    await message.answer(
+        "Список боссов:",
+        reply_markup=bosses_menu(list(BOSSES.keys()))
     )
 
-# =====================
-# СТЕНА ПЛОТИ
-# =====================
+# ---------- FALLBACK ----------
 
-@dp.callback_query(lambda c: c.data == "wall")
-async def wall(callback: CallbackQuery):
-    await callback.message.answer(
-        "🧱 **Стена плоти**\n\n"
-        "**Описание:**\n"
-        "Финальный босс Дохардмода.\n\n"
-
-        "**Призыв:**\n"
-        "• Бросить куклу вуду гида в лаву\n\n"
-
-        "**Подготовка:**\n"
-        "• Длинная дорога в аду\n"
-        "• Пробивающее оружие\n\n"
-
-        "**ВАЖНО:**\n"
-        "🔥 После победы начинается **Хардмод**",
-        parse_mode="Markdown"
+@dp.message_handler()
+async def fallback(message: types.Message):
+    await message.answer(
+        "Используй кнопки 👇",
+        reply_markup=main_menu
     )
 
-# =====================
-# ЗАГЛУШКИ
-# =====================
-
-@dp.callback_query(lambda c: c.data.endswith("stub"))
-async def stub(callback: CallbackQuery):
-    await callback.message.answer("⏳ Раздел в разработке")
-
-# =====================
-# ЗАПУСК
-# =====================
-
-async def main():
-    await dp.start_polling(bot)
+# ---------- RUN ----------
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    executor.start_polling(dp, skip_updates=True)
