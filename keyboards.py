@@ -1,17 +1,19 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 # Главное меню
-main_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🟢 Дохардмод", callback_data="stage_prehard")],
-    [InlineKeyboardButton(text="🔥 Хардмод", callback_data="stage_hard")],
-    [InlineKeyboardButton(text="📚 Общие гайды", callback_data="guides")]
-])
+main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+main_menu.add(
+    KeyboardButton("👁 Боссы"),
+    KeyboardButton("📘 Прогрессия"),
+    KeyboardButton("ℹ️ О боте")
+)
 
-# Дохардмод — боссы
-prehard_bosses = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="👁 Глаз Ктулху", callback_data="boss_eye")],
-    [InlineKeyboardButton(text="🐝 Королева пчёл", callback_data="boss_bee")],
-    [InlineKeyboardButton(text="💀 Скелетрон", callback_data="boss_skeletron")],
-    [InlineKeyboardButton(text="🧱 Стена плоти", callback_data="boss_wall")],
-    [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_main")]
-])
+def bosses_menu(bosses: list):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    for boss in bosses:
+        kb.add(KeyboardButton(boss))
+    kb.add(
+        KeyboardButton("⬅️ Назад"),
+        KeyboardButton("🏠 Главное меню")
+    )
+    return kb
