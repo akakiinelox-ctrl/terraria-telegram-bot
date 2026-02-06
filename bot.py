@@ -29,36 +29,38 @@ def load_json(path):
         logging.error(f"Ошибка загрузки {path}: {e}")
         return {}
 
-BOSSES = load_json("data/bosses.json").get("pre_hardmode", {})
-
-# =====================
-# СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЯ
-# =====================
-
-user_boss = {}
-
-# =====================
-# ВСПОМОГАТЕЛЬНЫЕ
-# =====================
-
-def difficulty_icon(text: str) -> str:
-    if "Лёг" in text:
-        return "🟢"
-    if "Сред" in text:
-        return "🟡"
-    if "Слож" in text:
-        return "🔴"
-    return "⚪"
-
-# =====================
-# КЛАВИАТУРЫ
-# =====================
-
-def main_menu():
+def bosses_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
+
+    boss_icons = {
+        "Король слизней": "👑",
+        "Глаз Ктулху": "👁",
+        "Пожиратель миров": "🐛",
+        "Мозг Ктулху": "🧠",
+        "Королева пчёл": "🐝",
+        "Скелетрон": "💀",
+        "Стена плоти": "🔥"
+    }
+
+    for boss in BOSSES.values():
+        diff = boss.get("difficulty", "")
+        if "Лёг" in diff:
+            diff_icon = "🟢"
+        elif "Сред" in diff:
+            diff_icon = "🟡"
+        elif "Слож" in diff:
+            diff_icon = "🔴"
+        else:
+            diff_icon = "⚪"
+
+        name = boss["name"]
+        icon = boss_icons.get(name, "👁")
+
+        kb.add(KeyboardButton(f"{diff_icon} {icon} {name}"))
+
     kb.add(
-        KeyboardButton("👁 Боссы"),
-        KeyboardButton("ℹ️ О боте")
+        KeyboardButton("⬅️ Назад"),
+        KeyboardButton("🏠 Главное меню")
     )
     return kb
 
