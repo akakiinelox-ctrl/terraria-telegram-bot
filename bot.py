@@ -1,95 +1,161 @@
 import json
 import os
-import re
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardRemove
-from aiogram.utils import executor
+from aiogram import Bot, Dispatcher, executor, types
 
-from keyboards import main_menu, bosses_keyboard
-
+from keyboards import main_menu_kb, bosses_kb, back_menu_kb
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
 
-# ---------- utils ----------
+# ---------- ВСПОМОГАТЕЛЬНОЕ ----------
 
 def load_json(path: str):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def clear_name(text: str) -> str:
     """
-    Убираем эмодзи и лишние символы
+    Убирает эмодзи и лишние символы из кнопки,
+    чтобы совпало с ключом в bosses.json
     """
-    text = re.sub(r"[^\w\sА-Яа-яЁё]", "", text)
-    return text.strip().lower()
+    return (
+        text.replace("🟢", "")
+        .replace("🟡", "")
+        .replace("🔴", "")
+        .replace("🔥", "")
+        .replace("👑", "")
+        .replace("🐛", "")
+        .replace("👁", "")
+        .replace("🦴", "")
+        .replace("🐝", "")
+        .replace("🧠", "")
+        .replace("🌙", "")
+        .replace("💀", "")
+        .strip()
+        .lower()
+    )
 
 
-# ---------- data ----------
+# ---------- ДАННЫЕ ----------
 
 BOSSES = load_json("data/bosses.json")
+PROGRESSION = load_json("data/progression.json")
 
 
-# ---------- handlers ----------
+# ---------- START / ГЛАВНОЕ МЕНЮ ----------
 
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     await message.answer(
-        "🎮 *Terraria Guide*\n\n"
-        "Полноценные гайды по боссам, прогрессу и подготовке.\n"
-        "Используй кнопки ниже 👇",
-        reply_markup=main_menu(),
+        "🎮 *Terraria Guide Bot*\n\n"
+        "Полные гайды по Terraria.\n"
+        "Используй кнопки 👇",
+        reply_markup=main_menu_kb(),
         parse_mode="Markdown"
     )
 
 
+@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
+async def main_menu(message: types.Message):
+    await start(message)
+
+
+# ---------- БОССЫ ----------
+
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
-async def show_bosses(message: types.Message):
+async def bosses_menu(message: types.Message):
     await message.answer(
-        "Выбери босса:",
-        reply_markup=bosses_keyboard()
+        "👁 *Выбери босса:*",
+        reply_markup=bosses_kb(),
+        parse_mode="Markdown"
     )
 
 
-@dp.message_handler()
-async def boss_guide(message: types.Message):
+@dp.message_handler(lambda m: clear_name(m.text) in BOSSES)
+async def show_boss_guide(message: types.Message):
     key = clear_name(message.text)
-
-    if key not in BOSSES:
-        return  # игнорируем лишний текст, чтобы не было мусора и крашей
-
-    b = BOSSES[key]
+    boss = BOSSES[key]
 
     text = (
-        f"{b['icon']} *{b['name']}*\n"
-        f"{b['difficulty']}\n\n"
+        f"{boss['icon']} *{boss['name']}*\n"
+        f"{boss['difficulty']}\n\n"
 
-        f"📍 *Этап:* {b['stage']}\n"
-        f"🎯 *Зачем убивать:*\n{b['why']}\n\n"
+        f"📍 *Этап:* {boss['stage']}\n\n"
 
-        f"📦 *Призыв:*\n{b['summon']}\n\n"
+        f"🎯 *Зачем убивать:*\n"
+        f"{boss['why']}\n\n"
 
-        f"🛡 *Рекомендуемая броня:*\n{b['armor']}\n\n"
-        f"⚔️ *Оружие по классам:*\n{b['weapons']}\n\n"
+        f"📦 *Призыв:*\n"
+        f"{boss['summon']}\n\n"
 
-        f"🏗 *Арена:*\n{b['arena']}\n\n"
-        f"⚠️ *Опасности:*\n{b['dangers']}\n\n"
+        f"🛡 *Рекомендуемая броня:*\n"
+        f"{boss['armor']}\n\n"
 
-        f"🏆 *Награды:*\n{b['loot']}"
+        f"⚔️ *Оружие по классам:*\n"
+        f"{boss['weapons']}\n\n"
+
+        f"🏗 *Арена:*\n"
+        f"{boss['arena']}\n\n"
+
+        f"⚠️ *Опасности:*\n"
+        f"{boss['dangers']}\n\n"
+
+        f"🏆 *Дроп и польза:*\n"
+        f"{boss['loot']}"
     )
 
     await message.answer(
         text,
-        reply_markup=main_menu(),
+        reply_markup=back_menu_kb(),
         parse_mode="Markdown"
     )
 
 
-# ---------- run ----------
+# ---------- ПРОГРЕСС ----------
+
+@dp.message_handler(lambda m: m.text == "📊 Прогресс")
+async def show_progress(message: types.Message):
+    progress = PROGRESSION["pre_hardmode"]
+
+    text = "📊 *Прогресс (Дохардмод)*\n\n"
+    for boss in progress:
+        text += f"❌ {boss}\n"
+
+    await message.answer(
+        text,
+        reply_markup=back_menu_kb(),
+        parse_mode="Markdown"
+    )
+
+
+# ---------- ИЗБРАННОЕ (заглушка) ----------
+
+@dp.message_handler(lambda m: m.text == "⭐ Избранное")
+async def favorites(message: types.Message):
+    await message.answer(
+        "⭐ *Избранное*\n\n"
+        "Пока в разработке 👷",
+        reply_markup=back_menu_kb(),
+        parse_mode="Markdown"
+    )
+
+
+# ---------- FALLBACK ----------
+
+@dp.message_handler()
+async def fallback(message: types.Message):
+    await message.answer(
+        "Используй кнопки 👇",
+        reply_markup=main_menu_kb()
+    )
+
+
+# ---------- ЗАПУСК ----------
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
