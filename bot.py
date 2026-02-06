@@ -37,9 +37,10 @@ BOSSES = DATA.get("pre_hardmode", {})
 # =========================
 
 user_selected_boss = {}
+user_favorites = {}  # user_id -> set(boss_name)
 
 # =========================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ВСПОМОГАТЕЛЬНЫЕ
 # =========================
 
 def difficulty_icon(text: str) -> str:
@@ -63,6 +64,9 @@ def boss_visual_icon(name: str) -> str:
     }
     return icons.get(name, "👁")
 
+def get_favorites(user_id):
+    return user_favorites.setdefault(user_id, set())
+
 # =========================
 # КЛАВИАТУРЫ
 # =========================
@@ -71,23 +75,45 @@ def main_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(
         KeyboardButton("👁 Боссы"),
+        KeyboardButton("⭐ Избранное"),
         KeyboardButton("ℹ️ О боте")
     )
     return kb
 
-def bosses_menu():
+def bosses_menu(user_id):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    favs = get_favorites(user_id)
+
     for boss in BOSSES.values():
         diff = difficulty_icon(boss.get("difficulty", ""))
         icon = boss_visual_icon(boss["name"])
-        kb.add(KeyboardButton(f"{diff} {icon} {boss['name']}"))
+        star = " ⭐" if boss["name"] in favs else ""
+        kb.add(KeyboardButton(f"{diff} {icon} {boss['name']}{star}"))
+
     kb.add(
         KeyboardButton("⬅️ Назад"),
         KeyboardButton("🏠 Главное меню")
     )
     return kb
 
-def boss_sections_menu():
+def favorites_menu(user_id):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    favs = get_favorites(user_id)
+
+    if not favs:
+        kb.add(KeyboardButton("⬅️ Назад"))
+        return kb
+
+    for name in favs:
+        kb.add(KeyboardButton(f"⭐ {name}"))
+
+    kb.add(
+        KeyboardButton("⬅️ Назад"),
+        KeyboardButton("🏠 Главное меню")
+    )
+    return kb
+
+def boss_sections_menu(is_favorite: bool):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(
         KeyboardButton("⚠️ Угрозы"),
@@ -100,7 +126,9 @@ def boss_sections_menu():
         KeyboardButton("🆘 Если сложно"),
         KeyboardButton("➡️ Зачем убивать")
     )
+
     kb.add(
+        KeyboardButton("⭐ Убрать из избранного" if is_favorite else "⭐ В избранное"),
         KeyboardButton("⬅️ К боссам"),
         KeyboardButton("🏠 Главное меню")
     )
@@ -111,69 +139,87 @@ def boss_sections_menu():
 # =========================
 
 @dp.message_handler(commands=["start"])
-async def cmd_start(message: types.Message):
+async def start(message: types.Message):
     await message.answer(
         "🎮 Terraria Guide Bot\n\n"
         "Справочник по боссам Terraria.\n"
-        "Вся информация — по делу и с объяснениями.\n\n"
+        "Глубокие гайды с объяснениями.\n\n"
         "Выбирай кнопками 👇",
         reply_markup=main_menu()
     )
-
-@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
-async def go_home(message: types.Message):
-    await message.answer("Главное меню:", reply_markup=main_menu())
 
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
 async def show_bosses(message: types.Message):
     await message.answer(
         "👁 Боссы (Дохардмод)\n\n"
-        "🟢 Лёгкий   🟡 Средний   🔴 Сложный\n"
-        "Иконка рядом с именем — тип босса.",
-        reply_markup=bosses_menu()
+        "🟢 Лёгкий   🟡 Средний   🔴 Сложный",
+        reply_markup=bosses_menu(message.from_user.id)
     )
 
-@dp.message_handler(lambda m: m.text == "⬅️ Назад")
-async def back_to_menu(message: types.Message):
-    await message.answer("Главное меню:", reply_markup=main_menu())
+@dp.message_handler(lambda m: m.text == "⭐ Избранное")
+async def show_favorites(message: types.Message):
+    favs = get_favorites(message.from_user.id)
+    if not favs:
+        await message.answer(
+            "⭐ Избранное пусто.\n\n"
+            "Добавь босса через его карточку.",
+            reply_markup=main_menu()
+        )
+        return
 
-@dp.message_handler(lambda m: m.text == "⬅️ К боссам")
-async def back_to_bosses(message: types.Message):
-    await message.answer("Выбери босса:", reply_markup=bosses_menu())
+    await message.answer(
+        "⭐ Избранные боссы:",
+        reply_markup=favorites_menu(message.from_user.id)
+    )
 
-@dp.message_handler(lambda m: any(boss["name"] in m.text for boss in BOSSES.values()))
+@dp.message_handler(lambda m: any(b["name"] in m.text for b in BOSSES.values()))
 async def select_boss(message: types.Message):
     for boss in BOSSES.values():
         if boss["name"] in message.text:
             user_selected_boss[message.from_user.id] = boss
+            favs = get_favorites(message.from_user.id)
+            is_fav = boss["name"] in favs
+
             diff = difficulty_icon(boss.get("difficulty", ""))
             icon = boss_visual_icon(boss["name"])
+
             await message.answer(
-                f"{diff} {icon} {boss['name']}\n"
-                f"{boss['stage']}\n\n"
-                "Выбери раздел:",
-                reply_markup=boss_sections_menu()
+                f"{diff} {icon} {boss['name']}\n{boss['stage']}\n\nВыбери раздел:",
+                reply_markup=boss_sections_menu(is_fav)
             )
             return
 
-@dp.message_handler(lambda m: m.text in [
-    "⚠️ Угрозы",
-    "📋 Минимум",
-    "🛡 Броня и ресурсы",
-    "⚔️ Оружие",
-    "🏗 Арена",
-    "🎯 Поведение и урон",
-    "❌ Ошибки",
-    "🆘 Если сложно",
-    "➡️ Зачем убивать"
-])
-async def show_boss_section(message: types.Message):
+@dp.message_handler(lambda m: m.text in ["⭐ В избранное", "⭐ Убрать из избранного"])
+async def toggle_favorite(message: types.Message):
     boss = user_selected_boss.get(message.from_user.id)
     if not boss:
         await message.answer("Сначала выбери босса.", reply_markup=main_menu())
         return
 
-    section_map = {
+    favs = get_favorites(message.from_user.id)
+    name = boss["name"]
+
+    if name in favs:
+        favs.remove(name)
+        text = f"❌ {name} убран из избранного"
+    else:
+        favs.add(name)
+        text = f"⭐ {name} добавлен в избранное"
+
+    await message.answer(text, reply_markup=boss_sections_menu(name in favs))
+
+@dp.message_handler(lambda m: m.text in [
+    "⚠️ Угрозы", "📋 Минимум", "🛡 Броня и ресурсы", "⚔️ Оружие",
+    "🏗 Арена", "🎯 Поведение и урон", "❌ Ошибки",
+    "🆘 Если сложно", "➡️ Зачем убивать"
+])
+async def show_section(message: types.Message):
+    boss = user_selected_boss.get(message.from_user.id)
+    if not boss:
+        await message.answer("Сначала выбери босса.", reply_markup=main_menu())
+        return
+
+    sections = {
         "⚠️ Угрозы": boss["threat_profile"],
         "📋 Минимум": boss["minimum_requirements"],
         "🛡 Броня и ресурсы": f"{boss['recommended_armor']}\n\nРесурсы:\n{boss['required_resources']}",
@@ -190,29 +236,36 @@ async def show_boss_section(message: types.Message):
         "➡️ Зачем убивать": boss["progression_value"]
     }
 
-    text = section_map.get(message.text, "Нет данных.")
+    favs = get_favorites(message.from_user.id)
+    is_fav = boss["name"] in favs
+
     await message.answer(
-        f"{message.text} — {boss['name']}\n\n{text}",
-        reply_markup=boss_sections_menu()
+        f"{message.text} — {boss['name']}\n\n{sections.get(message.text, 'Нет данных')}",
+        reply_markup=boss_sections_menu(is_fav)
     )
 
+@dp.message_handler(lambda m: m.text in ["⬅️ Назад", "⬅️ К боссам"])
+async def back(message: types.Message):
+    await message.answer("Выбери босса:", reply_markup=bosses_menu(message.from_user.id))
+
+@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
+async def home(message: types.Message):
+    await message.answer("Главное меню:", reply_markup=main_menu())
+
 @dp.message_handler(lambda m: m.text == "ℹ️ О боте")
-async def about_bot(message: types.Message):
+async def about(message: types.Message):
     await message.answer(
         "ℹ️ О боте\n\n"
-        "• Это справочник по Terraria\n"
-        "• Все гайды объясняют «зачем и почему»\n"
-        "• Информация основана на vanilla Terraria 1.4.x\n\n"
-        "Используй кнопки — так удобнее 🙂",
+        "• Справочник по Terraria\n"
+        "• Гайды с объяснением «зачем и почему»\n"
+        "• Vanilla Terraria 1.4.x\n\n"
+        "⭐ Используй избранное, чтобы сохранять боссов.",
         reply_markup=main_menu()
     )
 
 @dp.message_handler()
 async def fallback(message: types.Message):
-    await message.answer(
-        "Используй кнопки ниже 👇",
-        reply_markup=main_menu()
-    )
+    await message.answer("Используй кнопки 👇", reply_markup=main_menu())
 
 # =========================
 # ЗАПУСК
