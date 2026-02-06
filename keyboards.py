@@ -1,97 +1,35 @@
-import json
-from aiogram import Bot, Dispatcher, executor, types
-
-from keyboards import main_menu_kb, bosses_kb, back_menu_kb
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 
-BOT_TOKEN = "ТОКЕН_ТУТ"
-
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
-
-
-# ---------- ЗАГРУЗКА ДАННЫХ ----------
-
-with open("data/bosses.json", encoding="utf-8") as f:
-    BOSSES = json.load(f)
-
-
-# ---------- START ----------
-
-@dp.message_handler(commands=["start"])
-async def start_cmd(message: types.Message):
-    await message.answer(
-        "🎮 *Terraria Guide Bot*\n\nПолные гайды по Terraria.\nИспользуй кнопки 👇",
-        reply_markup=main_menu_kb(),
-        parse_mode="Markdown"
+def main_menu_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(
+        KeyboardButton("👁 Боссы"),
+        KeyboardButton("⭐ Избранное")
     )
-
-
-# ---------- ГЛАВНОЕ МЕНЮ ----------
-
-@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
-async def main_menu(message: types.Message):
-    await message.answer(
-        "Главное меню:",
-        reply_markup=main_menu_kb()
+    kb.add(
+        KeyboardButton("📊 Прогресс")
     )
+    return kb
 
 
-# ---------- БОССЫ (МЕНЮ) ----------
+def bosses_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
 
-@dp.message_handler(lambda m: m.text == "👁 Боссы")
-async def bosses_menu(message: types.Message):
-    await message.answer(
-        "👁 Выбери босса:",
-        reply_markup=bosses_kb()
-    )
+    kb.add("🟢 👑 Король слизней")
+    kb.add("🟡 👁 Глаз Ктулху")
+    kb.add("🟡 🐛 Пожиратель миров")
+    kb.add("🟡 🧠 Мозг Ктулху")
+    kb.add("🟡 🐝 Королева пчёл")
+    kb.add("🔴 🦴 Скелетрон")
+    kb.add("🔴 🔥 Стена плоти")
 
-
-# ---------- КОНКРЕТНЫЙ БОСС ----------
-
-@dp.message_handler(lambda m: m.text in BOSSES)
-async def boss_guide(message: types.Message):
-    boss_name = message.text
-    boss = BOSSES[boss_name]
-
-    text = (
-        f"{boss['icon']} *{boss_name}*\n"
-        f"{boss['difficulty']}\n\n"
-        f"🎯 *Зачем убивать:*\n{boss['reason']}\n\n"
-        f"🛡 *Рекомендуемая броня:*\n{boss['armor']}\n\n"
-        f"⚔️ *Оружие:*\n{boss['weapons']}\n\n"
-        f"🏗 *Арена:*\n{boss['arena']}\n\n"
-        f"🧠 *Тактика:*\n{boss['strategy']}"
-    )
-
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=back_menu_kb()
-    )
-
-    return  # ⬅️ ВАЖНО. БЕЗ ЭТОГО БУДЕТ ОТКАТ
+    kb.add("🏠 Главное меню")
+    return kb
 
 
-# ---------- ИЗБРАННОЕ ----------
-
-@dp.message_handler(lambda m: m.text == "⭐ Избранное")
-async def favorites(message: types.Message):
-    await message.answer(
-        "⭐ Избранное\n\nПока в разработке 👷‍♂️",
-        reply_markup=main_menu_kb()
-    )
-
-
-# ---------- ПРОГРЕСС ----------
-
-@dp.message_handler(lambda m: m.text == "📊 Прогресс")
-async def progress(message: types.Message):
-    await message.answer(
-        "📊 Прогресс\n\nФункция в разработке 🚧",
-        reply_markup=main_menu_kb()
-    )
-
-
-if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+def back_menu_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("👁 Боссы")
+    kb.add("🏠 Главное меню")
+    return kb
