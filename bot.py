@@ -1,46 +1,62 @@
 import json
+import os
+
 from aiogram import Bot, Dispatcher, executor, types
-from keyboards import main_menu_kb, bosses_kb
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-BOT_TOKEN = "8513031435:AAHfTK010ez5t5rYBXx5FxO5l-xRHZ8wZew"
-
+# ================== TOKEN ==================
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "TOKEN_ТУТ"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# ---------- ЗАГРУЗКА ДАННЫХ ----------
+# ================== LOAD DATA ==================
 with open("data/bosses.json", encoding="utf-8") as f:
     BOSSES = json.load(f)
 
-# ---------- СООТВЕТСТВИЕ КНОПОК → КЛЮЧИ JSON ----------
-BOSS_BUTTON_MAP = {
-    "🟢👑 Король слизней": "king_slime",
-    "🔴👁 Глаз Ктулху": "eye_of_cthulhu",
-    "🟡🐛 Пожиратель миров": "eater_of_worlds",
-    "🟣🧠 Мозг Ктулху": "brain_of_cthulhu",
-    "🟠🐝 Королева пчёл": "queen_bee",
-    "⚪💀 Скелетрон": "skeletron",
-    "🔴🔥 Стена плоти": "wall_of_flesh",
+with open("data/progression.json", encoding="utf-8") as f:
+    PROGRESSION = json.load(f)
+
+# ================== MAP ИМЁН → KEY ==================
+BOSS_NAME_MAP = {
+    "Король слизней": "king_slime",
+    "Глаз Ктулху": "eye_of_cthulhu",
+    "Пожиратель миров": "eater_of_worlds",
+    "Мозг Ктулху": "brain_of_cthulhu",
+    "Королева пчёл": "queen_bee",
+    "Скелетрон": "skeletron",
+    "Стена плоти": "wall_of_flesh",
 }
 
-# ---------- START ----------
+# ================== KEYBOARDS ==================
+def main_menu_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("👁 Боссы")
+    kb.add("⭐ Избранное", "📊 Прогресс")
+    return kb
+
+
+def bosses_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    for boss in BOSSES.values():
+        kb.add(boss["name"])
+    kb.add("🏠 Главное меню")
+    return kb
+
+
+# ================== START / AUTO START ==================
 @dp.message_handler(commands=["start"])
-async def start_cmd(message: types.Message):
+@dp.message_handler(lambda m: m.text in ("🏠 Главное меню",))
+async def start(message: types.Message):
     await message.answer(
-        "🎮 *Terraria Guide Bot*\n\nИспользуй кнопки 👇",
+        "🎮 *Terraria Guide Bot*\n\n"
+        "Полные гайды по боссам.\n"
+        "Используй кнопки 👇",
         reply_markup=main_menu_kb(),
         parse_mode="Markdown"
     )
 
-# ---------- ГЛАВНОЕ МЕНЮ ----------
-@dp.message_handler(lambda m: m.text == "⬅ Назад")
-@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
-async def main_menu(message: types.Message):
-    await message.answer(
-        "🏠 Главное меню",
-        reply_markup=main_menu_kb()
-    )
 
-# ---------- БОССЫ ----------
+# ================== BOSSES MENU ==================
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
 async def bosses_menu(message: types.Message):
     await message.answer(
@@ -48,25 +64,38 @@ async def bosses_menu(message: types.Message):
         reply_markup=bosses_kb()
     )
 
-# ---------- ГАЙД ПО БОССУ ----------
-@dp.message_handler(lambda m: m.text in BOSS_BUTTON_MAP)
+
+# ================== BOSS GUIDE ==================
+@dp.message_handler(lambda m: any(name in m.text for name in BOSS_NAME_MAP))
 async def boss_guide(message: types.Message):
-    boss_key = BOSS_BUTTON_MAP[message.text]
+    boss_key = None
+    for name, key in BOSS_NAME_MAP.items():
+        if name in message.text:
+            boss_key = key
+            break
+
+    if not boss_key:
+        await message.answer("❌ Босс не найден")
+        return
+
     boss = BOSSES[boss_key]
 
     text = (
         f"🔥 *{boss['name']}*\n"
         f"⚙ Стадия: {boss['stage']}\n"
         f"⚔ Сложность: {boss['difficulty']}\n\n"
+
         f"🚨 *Угрозы:*\n{boss['threat_profile']}\n\n"
         f"❤️ *Минимум:* {boss['minimum_requirements']}\n"
         f"🛡 *Броня:* {boss['recommended_armor']}\n"
         f"📦 *Ресурсы:* {boss['required_resources']}\n\n"
+
         f"⚔ *Оружие по классам:*\n"
         f"• Воин: {boss['weapons']['warrior']}\n"
         f"• Стрелок: {boss['weapons']['ranger']}\n"
         f"• Маг: {boss['weapons']['mage']}\n"
         f"• Призыватель: {boss['weapons']['summoner']}\n\n"
+
         f"🏗 *Арена:* {boss['arena_blueprint']}\n"
         f"🧠 *Поведение:* {boss['boss_behavior']}\n"
         f"💥 *Окна урона:* {boss['damage_windows']}\n"
@@ -81,15 +110,42 @@ async def boss_guide(message: types.Message):
         reply_markup=bosses_kb()
     )
 
-# ---------- ЗАГЛУШКИ ----------
-@dp.message_handler(lambda m: m.text == "⭐ Избранное")
-async def fav(message: types.Message):
-    await message.answer("⭐ Избранное\n\nВ разработке 👷", reply_markup=main_menu_kb())
 
+# ================== PROGRESS ==================
 @dp.message_handler(lambda m: m.text == "📊 Прогресс")
 async def progress(message: types.Message):
-    await message.answer("📊 Прогресс\n\nСкоро будет 👀", reply_markup=main_menu_kb())
+    completed = PROGRESSION.get("Дохардмод", [])
+    total = len(BOSSES)
 
-# ---------- RUN ----------
+    bar = "■" * len(completed) + "□" * (total - len(completed))
+
+    text = (
+        f"📊 *Прогресс*\n"
+        f"[{bar}] {int(len(completed)/total*100)}%\n\n" +
+        "\n".join(f"❌ {b}" for b in completed)
+    )
+
+    await message.answer(text, parse_mode="Markdown")
+
+
+# ================== FAVORITES ==================
+@dp.message_handler(lambda m: m.text == "⭐ Избранное")
+async def favorites(message: types.Message):
+    await message.answer(
+        "⭐ Избранное\n\n(пока в разработке)",
+        reply_markup=main_menu_kb()
+    )
+
+
+# ================== FALLBACK ==================
+@dp.message_handler()
+async def fallback(message: types.Message):
+    await message.answer(
+        "Используй кнопки 👇",
+        reply_markup=main_menu_kb()
+    )
+
+
+# ================== RUN ==================
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
