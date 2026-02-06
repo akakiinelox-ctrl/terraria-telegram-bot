@@ -1,25 +1,27 @@
 import json
-import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram.utils import executor
 
-# Берём токен ТОЛЬКО из окружения
+# токен из Railway Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is not set")
+    raise RuntimeError("BOT_TOKEN not set")
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(bot)
+
 
 def load(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
+
 BOSSES = load("data/bosses.json")
 
-@dp.message(Command("start"))
+
+@dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     await message.answer(
         "🎮 Terraria Guide Bot\n\n"
@@ -27,11 +29,12 @@ async def start(message: types.Message):
         "/boss eye of cthulhu"
     )
 
-@dp.message(Command("boss"))
-async def boss(message: types.Message):
-    name = message.text.replace("/boss", "").strip().lower()
 
-    if name not in BOSSES:
+@dp.message_handler(commands=["boss"])
+async def boss(message: types.Message):
+    name = message.get_args().lower()
+
+    if not name or name not in BOSSES:
         await message.answer("❌ Босс не найден")
         return
 
@@ -43,8 +46,6 @@ async def boss(message: types.Message):
         f"⚔️ Тактика: {b['strategy']}"
     )
 
-async def main():
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    executor.start_polling(dp, skip_updates=True)
