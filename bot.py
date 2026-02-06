@@ -28,18 +28,19 @@ def load_json(path):
 BOSSES = load_json("data/bosses.json").get("pre_hardmode", {})
 
 # =========================
-# ПРОГРЕССИЯ
+# ПРОГРЕССИЯ (ДОХАРДМОД)
 # =========================
 
-NEXT_BOSS = {
-    "Король слизней": "Глаз Ктулху",
-    "Глаз Ктулху": "EVIL_BOSS",
-    "Пожиратель миров": "Королева пчёл",
-    "Мозг Ктулху": "Королева пчёл",
-    "Королева пчёл": "Скелетрон",
-    "Скелетрон": "Стена плоти",
-    "Стена плоти": None
-}
+PROGRESSION_STEPS = [
+    "Король слизней",
+    "Глаз Ктулху",
+    "EVIL_BOSS",  # Пожиратель миров ИЛИ Мозг Ктулху
+    "Королева пчёл",
+    "Скелетрон",
+    "Стена плоти"
+]
+
+EVIL_BOSSES = {"Пожиратель миров", "Мозг Ктулху"}
 
 # =========================
 # СОСТОЯНИЕ
@@ -47,6 +48,7 @@ NEXT_BOSS = {
 
 user_selected_boss = {}
 user_favorites = {}
+user_defeated = {}  # user_id -> set(boss_name)
 
 # =========================
 # ВСПОМОГАТЕЛЬНЫЕ
@@ -75,6 +77,27 @@ def boss_icon(name):
 def get_favs(uid):
     return user_favorites.setdefault(uid, set())
 
+def get_defeated(uid):
+    return user_defeated.setdefault(uid, set())
+
+def progress_percent(uid):
+    defeated = get_defeated(uid)
+    done = 0
+
+    for step in PROGRESSION_STEPS:
+        if step == "EVIL_BOSS":
+            if defeated & EVIL_BOSSES:
+                done += 1
+        elif step in defeated:
+            done += 1
+
+    return int(done / len(PROGRESSION_STEPS) * 100)
+
+def progress_bar(percent):
+    total = 10
+    filled = int(percent / 10)
+    return "█" * filled + "░" * (total - filled)
+
 # =========================
 # КЛАВИАТУРЫ
 # =========================
@@ -82,19 +105,26 @@ def get_favs(uid):
 def main_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("👁 Боссы", "⭐ Избранное")
+    kb.add("📊 Прогресс")
     return kb
 
 def bosses_menu(uid):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     favs = get_favs(uid)
+    defeated = get_defeated(uid)
+
     for b in BOSSES.values():
         star = " ⭐" if b["name"] in favs else ""
-        kb.add(f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}{star}")
+        check = " ✔" if b["name"] in defeated else ""
+        kb.add(f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}{star}{check}")
+
     kb.add("🏠 Главное меню")
     return kb
 
-def boss_menu(is_fav):
+def boss_menu(uid, boss_name):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    defeated = get_defeated(uid)
+
     kb.add(
         "⚠️ Угрозы", "📋 Минимум",
         "🛡 Броня и ресурсы", "⚔️ Оружие",
@@ -102,7 +132,9 @@ def boss_menu(is_fav):
         "❌ Ошибки", "🆘 Если сложно",
         "➡️ Следующий босс"
     )
-    kb.add("⭐ Убрать из избранного" if is_fav else "⭐ В избранное")
+
+    kb.add("☑️ Я победил этого босса" if boss_name not in defeated else "❌ Снять отметку")
+
     kb.add("⬅️ К боссам", "🏠 Главное меню")
     return kb
 
@@ -123,47 +155,52 @@ async def select_boss(m):
     for b in BOSSES.values():
         if b["name"] in m.text:
             user_selected_boss[m.from_user.id] = b
-            fav = b["name"] in get_favs(m.from_user.id)
             await m.answer(
                 f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}\n{b['stage']}",
-                reply_markup=boss_menu(fav)
+                reply_markup=boss_menu(m.from_user.id, b["name"])
             )
             return
 
-@dp.message_handler(lambda m: m.text == "➡️ Следующий босс")
-async def next_boss(m):
+@dp.message_handler(lambda m: m.text in ["☑️ Я победил этого босса", "❌ Снять отметку"])
+async def toggle_defeated(m):
     boss = user_selected_boss.get(m.from_user.id)
     if not boss:
         await m.answer("Сначала выбери босса.")
         return
 
-    nxt = NEXT_BOSS.get(boss["name"])
-    if not nxt:
-        await m.answer("Это последний босс перед Хардмодом.")
-        return
+    defeated = get_defeated(m.from_user.id)
+    name = boss["name"]
 
-    if nxt == "EVIL_BOSS":
-        await m.answer(
-            "➡️ Следующий босс:\n"
-            "🐛 Пожиратель миров (Порча)\n"
-            "🧠 Мозг Ктулху (Багрянец)\n\n"
-            "Почему:\n"
-            "Эти боссы дают руду и экипировку\n"
-            "для дальнейшего прогресса."
-        )
-        return
+    if name in defeated:
+        defeated.remove(name)
+        text = f"❌ Снята отметка: {name}"
+    else:
+        defeated.add(name)
+        text = f"✔ Победа засчитана: {name}"
 
-    for b in BOSSES.values():
-        if b["name"] == nxt:
-            user_selected_boss[m.from_user.id] = b
-            fav = b["name"] in get_favs(m.from_user.id)
-            await m.answer(
-                f"➡️ Следующий босс:\n\n"
-                f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}\n\n"
-                f"Почему:\n{b['progression_value']}",
-                reply_markup=boss_menu(fav)
-            )
-            return
+    await m.answer(text, reply_markup=boss_menu(m.from_user.id, name))
+
+@dp.message_handler(lambda m: m.text == "📊 Прогресс")
+async def show_progress(m):
+    percent = progress_percent(m.from_user.id)
+    bar = progress_bar(percent)
+    defeated = get_defeated(m.from_user.id)
+
+    lines = []
+    for step in PROGRESSION_STEPS:
+        if step == "EVIL_BOSS":
+            ok = "✔" if defeated & EVIL_BOSSES else "✖"
+            lines.append(f"{ok} Пожиратель миров / Мозг Ктулху")
+        else:
+            ok = "✔" if step in defeated else "✖"
+            lines.append(f"{ok} {step}")
+
+    await m.answer(
+        "📊 Прогресс (Дохардмод)\n\n"
+        f"[{bar}] {percent}%\n\n" +
+        "\n".join(lines),
+        reply_markup=main_menu()
+    )
 
 @dp.message_handler(lambda m: m.text == "🏠 Главное меню")
 async def home(m):
