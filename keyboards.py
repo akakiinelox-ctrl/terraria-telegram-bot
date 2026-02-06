@@ -1,19 +1,49 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# Главное меню
-main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
-main_menu.add(
-    KeyboardButton("👁 Боссы"),
-    KeyboardButton("📘 Прогрессия"),
-    KeyboardButton("ℹ️ О боте")
-)
 
-def bosses_menu(bosses: list):
+# ---------- ГЛАВНОЕ МЕНЮ ----------
+
+def main_menu_kb():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    for boss in bosses:
-        kb.add(KeyboardButton(boss))
+
     kb.add(
-        KeyboardButton("⬅️ Назад"),
+        KeyboardButton("👁 Боссы"),
+        KeyboardButton("⭐ Избранное")
+    )
+    kb.add(
+        KeyboardButton("📊 Прогресс")
+    )
+
+    return kb
+
+
+# ---------- СПИСОК БОССОВ ----------
+
+def bosses_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+
+    kb.add(KeyboardButton("🟢 👑 Король слизней"))
+    kb.add(KeyboardButton("🟡 👁 Глаз Ктулху"))
+    kb.add(KeyboardButton("🟡 🐛 Пожиратель миров"))
+    kb.add(KeyboardButton("🟡 🐝 Королева пчёл"))
+    kb.add(KeyboardButton("🔴 🦴 Скелетрон"))
+    kb.add(KeyboardButton("🔴 🔥 Стена плоти"))
+
+    kb.add(
         KeyboardButton("🏠 Главное меню")
     )
+
+    return kb
+
+
+# ---------- НАЗАД / МЕНЮ ----------
+
+def back_menu_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+
+    kb.add(
+        KeyboardButton("👁 Боссы"),
+        KeyboardButton("🏠 Главное меню")
+    )
+
     return kb
