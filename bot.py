@@ -2,7 +2,7 @@ import json
 from aiogram import Bot, Dispatcher, executor, types
 from keyboards import main_menu_kb, bosses_kb
 
-BOT_TOKEN = "ТОКЕН_ИЗ_RAILWAY"
+BOT_TOKEN = "8513031435:AAHfTK010ez5t5rYBXx5FxO5l-xRHZ8wZew"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
