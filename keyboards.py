@@ -1,22 +1,22 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# ---------- ГЛАВНОЕ МЕНЮ ----------
 def main_menu_kb():
-    return ReplyKeyboardMarkup(resize_keyboard=True).add(
-        KeyboardButton("👁 Боссы"),
-        KeyboardButton("⭐ Избранное"),
-        KeyboardButton("📊 Прогресс")
-    )
-
-# ---------- БОССЫ ----------
-def bosses_kb():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🟢👑 Король слизней")
-    kb.add("🔴👁 Глаз Ктулху")
-    kb.add("🟡🐛 Пожиратель миров")
-    kb.add("🟣🧠 Мозг Ктулху")
-    kb.add("🟠🐝 Королева пчёл")
-    kb.add("⚪💀 Скелетрон")
-    kb.add("🔴🔥 Стена плоти")
-    kb.add("⬅ Назад")
+    kb.add(KeyboardButton("👁 Боссы"))
+    kb.add(KeyboardButton("⭐ Избранное"), KeyboardButton("📊 Прогресс"))
+    return kb
+
+def bosses_kb(bosses: dict):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    for key, boss in bosses.items():
+        kb.add(KeyboardButton(f"{boss['icon']} {boss['name']}"))
+    kb.add(KeyboardButton("⬅ Назад"))
+    return kb
+
+def boss_actions_kb():
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(KeyboardButton("⭐ В избранное"))
+    kb.add(KeyboardButton("✅ Пройден"))
+    kb.add(KeyboardButton("⬅ Назад"))
+    kb.add(KeyboardButton("🏠 Главное меню"))
     return kb
