@@ -7,7 +7,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN") or "TOKEN_TUT"
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# ================= DATA =================
+# ---------- DATA ----------
 with open("data/bosses.json", encoding="utf-8") as f:
     BOSSES = json.load(f)
 
@@ -24,14 +24,14 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ================= KEYBOARDS =================
+# ---------- KEYBOARDS ----------
 def main_menu_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("👁 Боссы")
     kb.add("⭐ Избранное", "📊 Прогресс")
     return kb
 
-def bosses_inline_kb():
+def bosses_kb():
     kb = types.InlineKeyboardMarkup(row_width=1)
     for key, boss in BOSSES.items():
         kb.add(types.InlineKeyboardButton(
@@ -42,12 +42,12 @@ def bosses_inline_kb():
 
 def boss_actions_kb(boss_key, is_fav):
     kb = types.InlineKeyboardMarkup(row_width=2)
-
-    if is_fav:
-        kb.add(types.InlineKeyboardButton("❌ Убрать из избранного", callback_data=f"unfav:{boss_key}"))
-    else:
-        kb.add(types.InlineKeyboardButton("⭐ В избранное", callback_data=f"fav:{boss_key}"))
-
+    kb.add(
+        types.InlineKeyboardButton(
+            "❌ Убрать из избранного" if is_fav else "⭐ В избранное",
+            callback_data=f"{'unfav' if is_fav else 'fav'}:{boss_key}"
+        )
+    )
     kb.add(types.InlineKeyboardButton("✅ Пройден", callback_data=f"done:{boss_key}"))
     kb.add(
         types.InlineKeyboardButton("↩ Назад", callback_data="back:bosses"),
@@ -55,34 +55,9 @@ def boss_actions_kb(boss_key, is_fav):
     )
     return kb
 
-# ================= START =================
-@dp.message_handler(commands=["start"])
-async def start(message: types.Message):
-    await message.answer(
-        "🎮 *Terraria Guide Bot*\n\nВыбери раздел:",
-        reply_markup=main_menu_kb(),
-        parse_mode="Markdown"
-    )
-
-# ================= BOSSES =================
-@dp.message_handler(lambda m: m.text == "👁 Боссы")
-async def bosses_menu(message: types.Message):
-    await message.answer(
-        "👁 *Боссы Terraria:*",
-        reply_markup=bosses_inline_kb(),
-        parse_mode="Markdown"
-    )
-
-# ================= SHOW BOSS =================
-@dp.callback_query_handler(lambda c: c.data.startswith("boss:"))
-async def show_boss(call: types.CallbackQuery):
-    boss_key = call.data.split(":")[1]
-    boss = BOSSES[boss_key]
-
-    favs = load_json(FAVORITES_PATH).get(str(call.from_user.id), [])
-    is_fav = boss_key in favs
-
-    text = (
+# ---------- HELPERS ----------
+def render_boss_text(boss):
+    return (
         f"{boss['icon']} *{boss['name']}*\n\n"
         f"⚔ Сложность: *{boss['difficulty']}*\n\n"
         f"🧠 *Опасность:*\n{boss['threat_profile']}\n\n"
@@ -95,31 +70,55 @@ async def show_boss(call: types.CallbackQuery):
         f"🎁 *Зачем убивать:*\n{boss['progression_value']}"
     )
 
+# ---------- START ----------
+@dp.message_handler(commands=["start"])
+async def start(message: types.Message):
+    await message.answer(
+        "🎮 *Terraria Guide Bot*\n\nВыбери раздел:",
+        reply_markup=main_menu_kb(),
+        parse_mode="Markdown"
+    )
+
+# ---------- BOSSES ----------
+@dp.message_handler(lambda m: m.text == "👁 Боссы")
+async def bosses_menu(message: types.Message):
+    await message.answer(
+        "👁 *Боссы Terraria:*",
+        reply_markup=bosses_kb(),
+        parse_mode="Markdown"
+    )
+
+@dp.callback_query_handler(lambda c: c.data.startswith("boss:"))
+async def boss_view(call: types.CallbackQuery):
+    boss_key = call.data.split(":")[1]
+    boss = BOSSES[boss_key]
+
+    favs = load_json(FAVORITES_PATH).get(str(call.from_user.id), [])
+    text = render_boss_text(boss)
+
     await call.message.edit_text(
         text,
         parse_mode="Markdown",
-        reply_markup=boss_actions_kb(boss_key, is_fav)
+        reply_markup=boss_actions_kb(boss_key, boss_key in favs)
     )
     await call.answer()
 
-# ================= FAVORITES =================
+# ---------- FAVORITES ----------
 @dp.callback_query_handler(lambda c: c.data.startswith("fav:"))
-async def add_fav(call: types.CallbackQuery):
+async def fav_add(call: types.CallbackQuery):
     boss_key = call.data.split(":")[1]
     uid = str(call.from_user.id)
 
     favs = load_json(FAVORITES_PATH)
     favs.setdefault(uid, [])
-
     if boss_key not in favs[uid]:
         favs[uid].append(boss_key)
         save_json(FAVORITES_PATH, favs)
 
     await call.answer("⭐ Добавлено")
-    await show_boss(call)
 
 @dp.callback_query_handler(lambda c: c.data.startswith("unfav:"))
-async def remove_fav(call: types.CallbackQuery):
+async def fav_remove(call: types.CallbackQuery):
     boss_key = call.data.split(":")[1]
     uid = str(call.from_user.id)
 
@@ -129,9 +128,8 @@ async def remove_fav(call: types.CallbackQuery):
         save_json(FAVORITES_PATH, favs)
 
     await call.answer("❌ Убрано")
-    await show_boss(call)
 
-# ================= DONE =================
+# ---------- DONE ----------
 @dp.callback_query_handler(lambda c: c.data.startswith("done:"))
 async def mark_done(call: types.CallbackQuery):
     boss_key = call.data.split(":")[1]
@@ -139,32 +137,31 @@ async def mark_done(call: types.CallbackQuery):
 
     progress = load_json(PROGRESS_PATH)
     progress.setdefault(uid, [])
-
     if boss_key not in progress[uid]:
         progress[uid].append(boss_key)
         save_json(PROGRESS_PATH, progress)
 
     await call.answer("✅ Отмечено")
 
-# ================= NAV =================
+# ---------- NAV ----------
 @dp.callback_query_handler(lambda c: c.data == "back:bosses")
-async def back_to_bosses(call: types.CallbackQuery):
+async def back_bosses(call: types.CallbackQuery):
     await call.message.edit_text(
         "👁 *Боссы Terraria:*",
-        reply_markup=bosses_inline_kb(),
+        reply_markup=bosses_kb(),
         parse_mode="Markdown"
     )
     await call.answer()
 
 @dp.callback_query_handler(lambda c: c.data == "back:menu")
-async def back_to_menu(call: types.CallbackQuery):
+async def back_menu(call: types.CallbackQuery):
     await call.message.delete()
     await call.message.answer("Главное меню:", reply_markup=main_menu_kb())
     await call.answer()
 
-# ================= PROGRESS =================
+# ---------- PROGRESS ----------
 @dp.message_handler(lambda m: m.text == "📊 Прогресс")
-async def show_progress(message: types.Message):
+async def progress(message: types.Message):
     uid = str(message.from_user.id)
     done = load_json(PROGRESS_PATH).get(uid, [])
 
@@ -177,9 +174,9 @@ async def show_progress(message: types.Message):
         parse_mode="Markdown"
     )
 
-# ================= FAVORITES MENU =================
+# ---------- FAVORITES MENU ----------
 @dp.message_handler(lambda m: m.text == "⭐ Избранное")
-async def show_favorites(message: types.Message):
+async def favorites_menu(message: types.Message):
     uid = str(message.from_user.id)
     favs = load_json(FAVORITES_PATH).get(uid, [])
 
@@ -196,6 +193,6 @@ async def show_favorites(message: types.Message):
 
     await message.answer("⭐ *Избранное:*", reply_markup=kb, parse_mode="Markdown")
 
-# ================= RUN =================
+# ---------- RUN ----------
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
