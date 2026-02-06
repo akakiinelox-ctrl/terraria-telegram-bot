@@ -1,181 +1,95 @@
 import json
-import logging
 import os
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+import re
 
-logging.basicConfig(level=logging.INFO)
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import ReplyKeyboardRemove
+from aiogram.utils import executor
+
+from keyboards import main_menu, bosses_keyboard
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN не задан")
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-# =========================
-# ДАННЫЕ
-# =========================
 
-def load_json(path):
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logging.error(e)
-        return {}
+# ---------- utils ----------
 
-BOSSES = load_json("data/bosses.json").get("pre_hardmode", {})
+def load_json(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# =========================
-# ПРОГРЕССИЯ
-# =========================
 
-NEXT_BOSS = {
-    "Король слизней": "Глаз Ктулху",
-    "Глаз Ктулху": "EVIL_BOSS",
-    "Пожиратель миров": "Королева пчёл",
-    "Мозг Ктулху": "Королева пчёл",
-    "Королева пчёл": "Скелетрон",
-    "Скелетрон": "Стена плоти",
-    "Стена плоти": None
-}
+def clear_name(text: str) -> str:
+    """
+    Убираем эмодзи и лишние символы
+    """
+    text = re.sub(r"[^\w\sА-Яа-яЁё]", "", text)
+    return text.strip().lower()
 
-# =========================
-# СОСТОЯНИЕ
-# =========================
 
-user_selected_boss = {}
-user_favorites = {}
+# ---------- data ----------
 
-# =========================
-# ВСПОМОГАТЕЛЬНЫЕ
-# =========================
+BOSSES = load_json("data/bosses.json")
 
-def difficulty_icon(text):
-    if "Лёг" in text:
-        return "🟢"
-    if "Сред" in text:
-        return "🟡"
-    if "Слож" in text:
-        return "🔴"
-    return "⚪"
 
-def boss_icon(name):
-    return {
-        "Король слизней": "👑",
-        "Глаз Ктулху": "👁",
-        "Пожиратель миров": "🐛",
-        "Мозг Ктулху": "🧠",
-        "Королева пчёл": "🐝",
-        "Скелетрон": "💀",
-        "Стена плоти": "🔥"
-    }.get(name, "👁")
-
-def get_favs(uid):
-    return user_favorites.setdefault(uid, set())
-
-# =========================
-# КЛАВИАТУРЫ
-# =========================
-
-def main_menu():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("👁 Боссы", "⭐ Избранное")
-    return kb
-
-def bosses_menu(uid):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    favs = get_favs(uid)
-    for b in BOSSES.values():
-        star = " ⭐" if b["name"] in favs else ""
-        kb.add(f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}{star}")
-    kb.add("🏠 Главное меню")
-    return kb
-
-def boss_menu(is_fav):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(
-        "⚠️ Угрозы", "📋 Минимум",
-        "🛡 Броня и ресурсы", "⚔️ Оружие",
-        "🏗 Арена", "🎯 Поведение и урон",
-        "❌ Ошибки", "🆘 Если сложно",
-        "➡️ Следующий босс"
-    )
-    kb.add("⭐ Убрать из избранного" if is_fav else "⭐ В избранное")
-    kb.add("⬅️ К боссам", "🏠 Главное меню")
-    return kb
-
-# =========================
-# ХЕНДЛЕРЫ
-# =========================
+# ---------- handlers ----------
 
 @dp.message_handler(commands=["start"])
-async def start(m):
-    await m.answer("🎮 Terraria Guide Bot", reply_markup=main_menu())
+async def start(message: types.Message):
+    await message.answer(
+        "🎮 *Terraria Guide*\n\n"
+        "Полноценные гайды по боссам, прогрессу и подготовке.\n"
+        "Используй кнопки ниже 👇",
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
+    )
+
 
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
-async def bosses(m):
-    await m.answer("Выбери босса:", reply_markup=bosses_menu(m.from_user.id))
+async def show_bosses(message: types.Message):
+    await message.answer(
+        "Выбери босса:",
+        reply_markup=bosses_keyboard()
+    )
 
-@dp.message_handler(lambda m: any(b["name"] in m.text for b in BOSSES.values()))
-async def select_boss(m):
-    for b in BOSSES.values():
-        if b["name"] in m.text:
-            user_selected_boss[m.from_user.id] = b
-            fav = b["name"] in get_favs(m.from_user.id)
-            await m.answer(
-                f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}\n{b['stage']}",
-                reply_markup=boss_menu(fav)
-            )
-            return
-
-@dp.message_handler(lambda m: m.text == "➡️ Следующий босс")
-async def next_boss(m):
-    boss = user_selected_boss.get(m.from_user.id)
-    if not boss:
-        await m.answer("Сначала выбери босса.")
-        return
-
-    nxt = NEXT_BOSS.get(boss["name"])
-    if not nxt:
-        await m.answer("Это последний босс перед Хардмодом.")
-        return
-
-    if nxt == "EVIL_BOSS":
-        await m.answer(
-            "➡️ Следующий босс:\n"
-            "🐛 Пожиратель миров (Порча)\n"
-            "🧠 Мозг Ктулху (Багрянец)\n\n"
-            "Почему:\n"
-            "Эти боссы дают руду и экипировку\n"
-            "для дальнейшего прогресса."
-        )
-        return
-
-    for b in BOSSES.values():
-        if b["name"] == nxt:
-            user_selected_boss[m.from_user.id] = b
-            fav = b["name"] in get_favs(m.from_user.id)
-            await m.answer(
-                f"➡️ Следующий босс:\n\n"
-                f"{difficulty_icon(b['difficulty'])} {boss_icon(b['name'])} {b['name']}\n\n"
-                f"Почему:\n{b['progression_value']}",
-                reply_markup=boss_menu(fav)
-            )
-            return
-
-@dp.message_handler(lambda m: m.text == "🏠 Главное меню")
-async def home(m):
-    await m.answer("Главное меню:", reply_markup=main_menu())
 
 @dp.message_handler()
-async def fallback(m):
-    await m.answer("Используй кнопки 👇", reply_markup=main_menu())
+async def boss_guide(message: types.Message):
+    key = clear_name(message.text)
 
-# =========================
-# ЗАПУСК
-# =========================
+    if key not in BOSSES:
+        return  # игнорируем лишний текст, чтобы не было мусора и крашей
+
+    b = BOSSES[key]
+
+    text = (
+        f"{b['icon']} *{b['name']}*\n"
+        f"{b['difficulty']}\n\n"
+
+        f"📍 *Этап:* {b['stage']}\n"
+        f"🎯 *Зачем убивать:*\n{b['why']}\n\n"
+
+        f"📦 *Призыв:*\n{b['summon']}\n\n"
+
+        f"🛡 *Рекомендуемая броня:*\n{b['armor']}\n\n"
+        f"⚔️ *Оружие по классам:*\n{b['weapons']}\n\n"
+
+        f"🏗 *Арена:*\n{b['arena']}\n\n"
+        f"⚠️ *Опасности:*\n{b['dangers']}\n\n"
+
+        f"🏆 *Награды:*\n{b['loot']}"
+    )
+
+    await message.answer(
+        text,
+        reply_markup=main_menu(),
+        parse_mode="Markdown"
+    )
+
+
+# ---------- run ----------
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
