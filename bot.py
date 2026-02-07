@@ -1,26 +1,29 @@
-import os
 import json
 from aiogram import Bot, Dispatcher, executor, types
 
-# ================== TOKEN ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN не задан в Railway Variables")
+# ================== НАСТРОЙКИ ==================
+API_TOKEN = "8513031435:AAHfTK010ez5t5rYBXx5FxO5l-xRHZ8wZew"
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# ================== LOAD DATA ==================
+# ================== ЗАГРУЗКА ДАННЫХ ==================
 with open("data/bosses.json", encoding="utf-8") as f:
     BOSSES = json.load(f)
 
 with open("data/npcs.json", encoding="utf-8") as f:
-    NPCS = json.load(f)["npcs"]
+    NPCS_DATA = json.load(f)["npcs"]
 
-# ================== USER STATE ==================
-user_state = {}  # user_id -> dict
+# ================== СОСТОЯНИЕ ==================
+user_state = {}  
+# user_id -> {
+#   "mode": "boss" | "npc",
+#   "stage": str,
+#   "boss": str,
+#   "npc": str
+# }
 
-# ================== KEYBOARDS ==================
+# ================== КНОПКИ ==================
 
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -28,12 +31,10 @@ def main_menu():
     kb.add("📘 О боте")
     return kb
 
-def back_menu():
-    return types.ReplyKeyboardMarkup(resize_keyboard=True).add("⬅ Назад", "🏠 Главное меню")
-
-def stages_menu():
+def stage_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🌱 До Хардмода", "⚙️ Хардмод")
+    kb.add("🌱 До Хардмода")
+    kb.add("⚙️ Хардмод")
     kb.add("⬅ Назад")
     return kb
 
@@ -50,13 +51,20 @@ def boss_sections():
     kb.add("🛡 Подготовка", "🏗 Арена")
     kb.add("⚔ Оружие", "🧠 Тактика")
     kb.add("🔥 Опасности", "🎁 Зачем убивать")
-    kb.add("⬅ К списку боссов", "🏠 Главное меню")
+    kb.add("⬅ К списку", "🏠 Главное меню")
+    return kb
+
+def npc_stage_menu():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("🌱 NPC до Хардмода")
+    kb.add("⚙️ NPC Хардмода")
+    kb.add("⬅ Назад")
     return kb
 
 def npc_list(stage):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    for npc in NPCS.values():
-        if npc["stage"] == stage:
+    for key, npc in NPCS_DATA.items():
+        if npc.get("stage", "До Хардмода") == stage:
             kb.add(npc["name"])
     kb.add("⬅ Назад")
     return kb
@@ -65,12 +73,11 @@ def npc_sections():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📖 Описание", "🔓 Как получить")
     kb.add("🌍 Биом", "🏘️ Соседи")
-    kb.add("😊 Счастье и скидки")
-    kb.add("💡 Советы")
-    kb.add("⬅ К списку NPC", "🏠 Главное меню")
+    kb.add("😊 Счастье", "💡 Советы")
+    kb.add("⬅ К списку", "🏠 Главное меню")
     return kb
 
-# ================== HANDLERS ==================
+# ================== ОБЩИЕ ==================
 
 @dp.message_handler(commands=["start"])
 async def start(m: types.Message):
@@ -85,16 +92,16 @@ async def about(m: types.Message):
     await m.answer(
         "📘 Terraria Guide Bot\n\n"
         "Полный справочник по боссам и NPC Terraria.\n"
-        "Создан для новичков и комфортного прохождения.",
+        "Создан для новичков и прохождения без ошибок.",
         reply_markup=main_menu()
     )
 
-# ---------- BOSSES ----------
+# ================== БОССЫ ==================
 
 @dp.message_handler(lambda m: m.text == "👁 Боссы")
 async def bosses(m: types.Message):
-    user_state[m.from_user.id] = {"menu": "boss_stage"}
-    await m.answer("Выбери этап:", reply_markup=stages_menu())
+    user_state[m.from_user.id] = {"mode": "boss"}
+    await m.answer("Выбери этап:", reply_markup=stage_menu())
 
 @dp.message_handler(lambda m: m.text == "🌱 До Хардмода")
 async def bosses_pre(m: types.Message):
@@ -108,24 +115,22 @@ async def bosses_hard(m: types.Message):
 
 @dp.message_handler(lambda m: m.text in [b["name"] for b in BOSSES.values()])
 async def boss_select(m: types.Message):
+    uid = m.from_user.id
     for key, boss in BOSSES.items():
         if m.text == boss["name"]:
-            user_state[m.from_user.id]["boss"] = key
+            user_state[uid]["boss"] = key
             await m.answer(
                 f"{boss['name']}\n\n"
-                f"⚔ Сложность: {boss['difficulty']}\n"
-                f"📍 Этап: {boss['stage']}",
+                f"Сложность: {boss['difficulty']}\n"
+                f"Этап: {boss['stage']}",
                 reply_markup=boss_sections()
             )
-            return
 
-@dp.message_handler(lambda m: m.text in [
-    "🛡 Подготовка", "🏗 Арена", "⚔ Оружие",
-    "🧠 Тактика", "🔥 Опасности", "🎁 Зачем убивать"
-])
+@dp.message_handler(lambda m: m.text in ["🛡 Подготовка","🏗 Арена","⚔ Оружие","🧠 Тактика","🔥 Опасности","🎁 Зачем убивать"])
 async def boss_section(m: types.Message):
-    boss = BOSSES[user_state[m.from_user.id]["boss"]]
-    section_map = {
+    uid = m.from_user.id
+    boss = BOSSES[user_state[uid]["boss"]]
+    mapping = {
         "🛡 Подготовка": "preparation",
         "🏗 Арена": "arena",
         "⚔ Оружие": "weapons",
@@ -133,64 +138,51 @@ async def boss_section(m: types.Message):
         "🔥 Опасности": "dangers",
         "🎁 Зачем убивать": "why_kill"
     }
-    await m.answer(boss["sections"][section_map[m.text]], reply_markup=boss_sections())
+    await m.answer(boss["sections"][mapping[m.text]], reply_markup=boss_sections())
 
-@dp.message_handler(lambda m: m.text == "⬅ К списку боссов")
-async def back_bosses(m: types.Message):
-    stage = user_state[m.from_user.id]["stage"]
-    await m.answer("Боссы:", reply_markup=bosses_list(stage))
-
-# ---------- NPC ----------
+# ================== NPC ==================
 
 @dp.message_handler(lambda m: m.text == "🧑 NPC")
-async def npc_menu(m: types.Message):
-    user_state[m.from_user.id] = {"menu": "npc_stage"}
-    await m.answer("NPC Terraria:", reply_markup=stages_menu())
+async def npc_main(m: types.Message):
+    user_state[m.from_user.id] = {"mode": "npc"}
+    await m.answer("NPC Terraria:", reply_markup=npc_stage_menu())
 
-@dp.message_handler(lambda m: m.text in ["🌱 До Хардмода", "⚙️ Хардмод"] and user_state.get(m.from_user.id, {}).get("menu") == "npc_stage")
-async def npc_stage(m: types.Message):
-    stage = "Дохардмод" if m.text == "🌱 До Хардмода" else "Хардмод"
-    user_state[m.from_user.id]["npc_stage"] = stage
-    await m.answer("NPC:", reply_markup=npc_list(stage))
+@dp.message_handler(lambda m: m.text == "🌱 NPC до Хардмода")
+async def npc_pre(m: types.Message):
+    await m.answer("NPC до Хардмода:", reply_markup=npc_list("До Хардмода"))
 
-@dp.message_handler(lambda m: m.text in [n["name"] for n in NPCS.values()])
+@dp.message_handler(lambda m: m.text == "⚙️ NPC Хардмода")
+async def npc_hard(m: types.Message):
+    await m.answer("NPC Хардмода:", reply_markup=npc_list("Хардмод"))
+
+@dp.message_handler(lambda m: m.text in [n["name"] for n in NPCS_DATA.values()])
 async def npc_select(m: types.Message):
-    for key, npc in NPCS.items():
+    uid = m.from_user.id
+    for key, npc in NPCS_DATA.items():
         if m.text == npc["name"]:
-            user_state[m.from_user.id]["npc"] = key
-            await m.answer(
-                f"{npc['name']}",
-                reply_markup=npc_sections()
-            )
-            return
+            user_state[uid]["npc"] = key
+            await m.answer(npc["name"], reply_markup=npc_sections())
 
-@dp.message_handler(lambda m: m.text in [
-    "📖 Описание", "🔓 Как получить", "🌍 Биом",
-    "🏘️ Соседи", "😊 Счастье и скидки", "💡 Советы"
-])
+@dp.message_handler(lambda m: m.text in ["📖 Описание","🔓 Как получить","🌍 Биом","🏘️ Соседи","😊 Счастье","💡 Советы"])
 async def npc_section(m: types.Message):
-    npc = NPCS[user_state[m.from_user.id]["npc"]]
-    section_map = {
+    uid = m.from_user.id
+    npc = NPCS_DATA[user_state[uid]["npc"]]
+    map_sec = {
         "📖 Описание": "description",
         "🔓 Как получить": "how_to_get",
         "🌍 Биом": "biome",
         "🏘️ Соседи": "neighbors",
-        "😊 Счастье и скидки": "happiness",
+        "😊 Счастье": "happiness",
         "💡 Советы": "tips"
     }
-    await m.answer(npc["sections"][section_map[m.text]], reply_markup=npc_sections())
+    await m.answer(npc["sections"][map_sec[m.text]], reply_markup=npc_sections())
 
-@dp.message_handler(lambda m: m.text == "⬅ К списку NPC")
-async def back_npc(m: types.Message):
-    stage = user_state[m.from_user.id]["npc_stage"]
-    await m.answer("NPC:", reply_markup=npc_list(stage))
+# ================== НАЗАД ==================
 
-# ---------- BACK ----------
-
-@dp.message_handler(lambda m: m.text in ["⬅ Назад", "🏠 Главное меню"])
+@dp.message_handler(lambda m: m.text in ["⬅ Назад","⬅ К списку","🏠 Главное меню"])
 async def back(m: types.Message):
     await start(m)
 
-# ================== RUN ==================
+# ================== ЗАПУСК ==================
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
