@@ -42,7 +42,20 @@ def stage_menu(mode):
         kb.add("🌱 NPC до Хардмода", "⚙️ NPC Хардмода")
     kb.add("🏠 Главное меню")
     return kb
+def is_hardmode(stage: str) -> bool:
+    s = stage.lower()
 
+    if "переход" in s:
+        return True
+
+    if s in ["хардмод"]:
+        return True
+
+    if s in ["дохардмод", "до хардмода"]:
+        return False
+
+    # страховка
+    return False
 def list_menu(names):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for n in names:
