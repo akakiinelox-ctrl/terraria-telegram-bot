@@ -2,7 +2,7 @@ import json
 from aiogram import Bot, Dispatcher, executor, types
 from config import BOT_TOKEN
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=8513031435:AAHfTK010ez5t5rYBXx5FxO5l-xRHZ8wZew)
 dp = Dispatcher(bot)
 
 # ---------- LOAD DATA ----------
