@@ -1,74 +1,105 @@
 import os
 import json
+import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
+# Инициализация бота
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-def get_boss_data():
-    with open('data/bosses.json', 'r', encoding='utf-8') as f:
-        return json.load(f)
+# Загрузка JSON данных
+def load_bosses():
+    path = 'data/bosses.json'
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
 
-# --- ГЛАВНОЕ МЕНЮ ---
+# --- ОБРАБОТЧИКИ ---
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🗡️ Гайды по Классам", callback_data="menu_classes"))
-    builder.row(types.InlineKeyboardButton(text="👹 Боссы (Порядок)", callback_data="boss_list"))
-    builder.row(types.InlineKeyboardButton(text="💎 Новинки 1.4.5", callback_data="menu_145"))
+    builder.row(types.InlineKeyboardButton(text="🟢 До-Хардмод", callback_data="list_pre_hm"))
+    builder.row(types.InlineKeyboardButton(text="🔴 Хардмод", callback_data="list_hm"))
     
     await message.answer(
-        "👋 **Добро пожаловать в Terraria Guide v1.4.5!**\n\n"
-        "Я помогу тебе пройти путь от медного кинжала до Мунлорда. Выбери раздел:",
-        reply_markup=builder.as_markup(),
-        parse_mode="Markdown"
+        "🌳 **Добро пожаловать в гайд по Terraria 1.4.5!**\n\n"
+        "Выберите этап игры, чтобы увидеть список боссов:",
+        reply_markup=builder.as_markup()
     )
 
-# --- СПИСОК БОССОВ ---
-@dp.callback_query(F.data == "boss_list")
-async def show_bosses(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("list_"))
+async def show_boss_list(callback: types.CallbackQuery):
+    stage = callback.data.split("_")[1] # pre_hm или hm
+    data = load_bosses().get(stage, {})
+    
     builder = InlineKeyboardBuilder()
-    # Кнопки для конкретных боссов
-    builder.row(types.InlineKeyboardButton(text="👁️ Глаз Ктулху", callback_data="info_eye_of_cthulhu"))
-    builder.row(types.InlineKeyboardButton(text="🔥 Стена Плоти", callback_data="info_wall_of_flesh"))
+    for key, boss in data.items():
+        builder.row(types.InlineKeyboardButton(text=boss['name'], callback_data=f"select_{stage}_{key}"))
+    
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main"))
     
+    title = "🟢 Боссы До-Хардмода" if stage == "pre_hm" else "🔴 Боссы Хардмода"
+    await callback.message.edit_text(f"**{title}:**", reply_markup=builder.as_markup(), parse_mode="Markdown")
+
+@dp.callback_query(F.data.startswith("select_"))
+async def boss_menu(callback: types.CallbackQuery):
+    # data format: select_pre_hm_eye_of_cthulhu
+    parts = callback.data.split("_")
+    stage = f"{parts[1]}_{parts[2]}"
+    key = "_".join(parts[3:])
+    
+    boss_name = load_bosses()[stage][key]['name']
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(text="🛡️ Экипировка", callback_data=f"info_{stage}_{key}_gear"),
+        types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"info_{stage}_{key}_tactics")
+    )
+    builder.row(
+        types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"info_{stage}_{key}_drops"),
+        types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"info_{stage}_{key}_arena")
+    )
+    builder.row(types.InlineKeyboardButton(text="⬅️ К списку боссов", callback_data=f"list_{stage}"))
+    
     await callback.message.edit_text(
-        "⚔️ **Порядок прохождения боссов:**\n\n"
-        "Выбери босса, чтобы получить детальный гайд, тактику и список экипировки:",
+        f"📖 **Гайд: {boss_name}**\n\n{load_bosses()[stage][key]['general']}\n\nЧто именно тебя интересует?",
         reply_markup=builder.as_markup(),
         parse_mode="Markdown"
     )
 
-# --- ДЕТАЛЬНАЯ ИНФОРМАЦИЯ О БОССЕ ---
 @dp.callback_query(F.data.startswith("info_"))
-async def boss_detail(callback: types.CallbackQuery):
-    boss_key = callback.data.replace("info_", "")
-    data = get_boss_data().get(boss_key)
+async def display_info(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    # info_pre_hm_eye_of_cthulhu_gear
+    stage = f"{parts[1]}_{parts[2]}"
+    section = parts[-1]
+    key = "_".join(parts[3:-1])
     
-    text = (
-        f"{data['title']}\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"📝 **Описание:** {data['desc']}\n\n"
-        f"⚔️ **Тактика:**\n{data['tactics']}\n\n"
-        f"🛡️ **Экипировка:**\n{data['gear']}\n\n"
-        f"🏟️ **Арена:** {data['arena']}\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"✨ *Актуально для версии 1.4.5*"
-    )
+    boss = load_bosses()[stage][key]
+    
+    titles = {"gear": "🛡️ Экипировка", "tactics": "⚔️ Тактика", "drops": "🎁 Дроп", "arena": "🏟️ Арена"}
+    
+    response_text = f"**{boss['name']} — {titles[section]}**\n\n{boss[section]}"
     
     builder = InlineKeyboardBuilder()
-    builder.add(types.InlineKeyboardButton(text="⬅️ К списку боссов", callback_data="boss_list"))
+    builder.add(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"select_{stage}_{key}"))
     
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await callback.message.edit_text(response_text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "to_main")
-async def to_main(callback: types.CallbackQuery):
-    # Код возврата в главное меню (как в start)
-    await cmd_start(callback.message)
+async def back_to_main(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🟢 До-Хардмод", callback_data="list_pre_hm"))
+    builder.row(types.InlineKeyboardButton(text="🔴 Хардмод", callback_data="list_hm"))
+    await callback.message.edit_text("🌳 **Выберите этап игры:**", reply_markup=builder.as_markup())
 
 async def main():
     await dp.start_polling(bot)
