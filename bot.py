@@ -2,303 +2,251 @@ import os
 import json
 import logging
 import asyncio
-import random  # Добавили модуль для рандома
+import random
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# Включаем логирование
+# --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
-
-# --- КОНФИГУРАЦИЯ ---
-# Вставь свой токен сюда или используй переменную окружения
 TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # --- ЗАГРУЗКА ДАННЫХ ---
-def load_json(filename):
-    """Универсальная функция загрузки JSON"""
+def get_data(filename):
     try:
-        file_path = f'data/{filename}'
-        if not os.path.exists(file_path):
-            logging.error(f"Файл {file_path} не найден!")
-            return {}
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(f'data/{filename}.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        logging.error(f"Ошибка чтения {filename}: {e}")
+        logging.error(f"Ошибка загрузки {filename}: {e}")
         return {}
 
 # ==========================================
 # 🏠 ГЛАВНОЕ МЕНЮ
 # ==========================================
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="main_bosses"))
-    builder.row(types.InlineKeyboardButton(text="👥 NPC и Счастье", callback_data="main_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🛡️ Классы и Билды", callback_data="main_classes"))
+    builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
+                types.InlineKeyboardButton(text="⚔️ События", callback_data="m_events"))
+    builder.row(types.InlineKeyboardButton(text="🛡️ Классы", callback_data="m_classes"),
+                types.InlineKeyboardButton(text="👥 NPC", callback_data="m_npcs"))
+    builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
     await message.answer(
-        "👋 **Terraria Helper 2.0**\nЯ знаю всё о крафте, тактиках и билдах.\nВыбери раздел:",
-        reply_markup=builder.as_markup()
+        "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я помогу тебе подготовиться к любой угрозе. Выбери раздел:",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
     )
 
 @dp.callback_query(F.data == "to_main")
-async def back_to_main_callback(callback: types.CallbackQuery):
+async def back_to_main(callback: types.CallbackQuery):
     await cmd_start(callback.message)
 
 # ==========================================
-# 🛡️ ЛОГИКА КЛАССОВ (ПОДРОБНАЯ + РАНДОМАЙЗЕР)
+# ⚔️ РАЗДЕЛ: СОБЫТИЯ (ТАКТИЧЕСКИЙ ВИД)
 # ==========================================
-
-# 1. Выбор класса
-@dp.callback_query(F.data == "main_classes")
-async def classes_menu(callback: types.CallbackQuery):
-    data = load_json('classes.json')
+@dp.callback_query(F.data == "m_events")
+async def events_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
-    
-    # Кнопки классов из JSON
-    for key, val in data.items():
-        builder.row(types.InlineKeyboardButton(text=val['name'], callback_data=f"cls_start:{key}"))
-    
-    # --- НОВАЯ КНОПКА ДЛЯ СКУЧАЮЩИХ ---
-    builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно (Челлендж)", callback_data="class_random"))
-    
-    builder.row(types.InlineKeyboardButton(text="⬅️ В меню", callback_data="to_main"))
-    await callback.message.edit_text("🛡️ **Выбери класс:**\nКем ты хочешь играть? Или испытай удачу.", reply_markup=builder.as_markup())
+    builder.row(types.InlineKeyboardButton(text="🟢 До-Хардмод", callback_data="ev_l:pre_hm"),
+                types.InlineKeyboardButton(text="🔴 Хардмод", callback_data="ev_l:hm"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Меню", callback_data="to_main"))
+    await callback.message.edit_text("📅 **Выберите этап для просмотра нашествий:**", reply_markup=builder.as_markup())
 
-# --- РАНДОМАЙЗЕР ЧЕЛЛЕНДЖЕЙ ---
-@dp.callback_query(F.data == "class_random")
-async def random_challenge_handler(callback: types.CallbackQuery):
-    challenges = [
-        "🏹 **Стрелок-Робингуд:** Только луки. Никакого огнестрела и ракетниц!",
-        "⚔️ **Истинный Рыцарь:** Только мечи (True Melee). Йо-йо, бумеранги и снаряды мечей запрещены.",
-        "🎣 **Рыбак-Воин:** Можно использовать оружие и броню, полученные ТОЛЬКО из рыбалки (Рыба-меч, Акула-пила, Ревершарк).",
-        "💣 **Подрывник:** Убивай боссов только взрывчаткой (бомбы, динамит, гранаты).",
-        "🧙 **Гарри Поттер:** Только магические жезлы. Книги и магические пушки запрещены.",
-        "⛏️ **Шахтер:** Убивай врагов только инструментами (Кирки, Буры, Топоры).",
-        "🌵 **Друид:** Используй только снаряжение, связанное с растениями (Кактус, Трава, Листомет, Споры).",
-        "🤠 **Ковбой:** Только револьверы и дробовики. Никаких лазеров и автоматического оружия.",
-        "👺 **Предатель:** Используй оружие, выпадающее только с мобов того же биома, где ты находишься."
-    ]
-    
-    chal = random.choice(challenges)
-    
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🎲 Еще раз", callback_data="class_random"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ К классам", callback_data="main_classes"))
-    
-    await callback.message.edit_text(f"🎲 **Твой челлендж на прохождение:**\n\n{chal}", reply_markup=builder.as_markup(), parse_mode="Markdown")
-
-# 2. Выбор этапа игры (Детальный гайд)
-@dp.callback_query(F.data.startswith("cls_start:"))
-async def class_stage_select(callback: types.CallbackQuery):
-    class_id = callback.data.split(":")[1]
-    data = load_json('classes.json')
-    cls_name = data[class_id]['name']
-    
-    builder = InlineKeyboardBuilder()
-    # Этапы (ключи должны совпадать с JSON)
-    stages = {
-        "start": "🟢 Старт",
-        "pre_hm": "🟡 До Хардмода",
-        "hm_start": "🔴 Ранний ХМ",
-        "endgame": "🟣 Финал"
-    }
-    
-    for key, name in stages.items():
-        builder.add(types.InlineKeyboardButton(text=name, callback_data=f"cls_stage:{class_id}:{key}"))
-    builder.adjust(2) 
-    
-    builder.row(types.InlineKeyboardButton(text="⬅️ Другой класс", callback_data="main_classes"))
-    
-    await callback.message.edit_text(f"👤 **Класс: {cls_name}**\nВыберите этап игры:", reply_markup=builder.as_markup())
-
-# 3. Меню категорий
-@dp.callback_query(F.data.startswith("cls_stage:"))
-async def class_category_select(callback: types.CallbackQuery):
-    _, class_id, stage_id = callback.data.split(":")
-    data = load_json('classes.json')
-    stage_info = data[class_id]['stages'][stage_id]
-    
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🛡️ Броня", callback_data=f"cls_cat:{class_id}:{stage_id}:armor"))
-    builder.row(types.InlineKeyboardButton(text="⚔️ Оружие", callback_data=f"cls_cat:{class_id}:{stage_id}:weapons"))
-    builder.row(types.InlineKeyboardButton(text="💍 Аксессуары", callback_data=f"cls_cat:{class_id}:{stage_id}:accessories"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cls_start:{class_id}"))
-    
-    await callback.message.edit_text(
-        f"📅 **Этап: {stage_info['title']}**\nЧто будем собирать?", 
-        reply_markup=builder.as_markup()
-    )
-
-# 4. Список предметов
-@dp.callback_query(F.data.startswith("cls_cat:"))
-async def class_items_list(callback: types.CallbackQuery):
-    _, class_id, stage_id, category = callback.data.split(":")
-    data = load_json('classes.json')
-    items = data[class_id]['stages'][stage_id][category]
-    
-    builder = InlineKeyboardBuilder()
-    for index, item in enumerate(items):
-        builder.row(types.InlineKeyboardButton(
-            text=item['name'], 
-            callback_data=f"cls_item:{class_id}:{stage_id}:{category}:{index}"
-        ))
-    
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cls_stage:{class_id}:{stage_id}"))
-    
-    cat_names = {"armor": "Броня", "weapons": "Оружие", "accessories": "Аксессуары"}
-    await callback.message.edit_text(
-        f"🎒 **Список: {cat_names.get(category, category)}**\nНажми на предмет, чтобы узнать детали.",
-        reply_markup=builder.as_markup()
-    )
-
-# 5. Инфо о предмете
-@dp.callback_query(F.data.startswith("cls_item:"))
-async def class_item_info(callback: types.CallbackQuery):
-    _, class_id, stage_id, category, index = callback.data.split(":")
-    data = load_json('classes.json')
-    item = data[class_id]['stages'][stage_id][category][int(index)]
-    
-    await callback.answer(
-        f"ℹ️ {item['name']}\n\n📝 Где взять:\n{item['info']}",
-        show_alert=True
-    )
-
-# ==========================================
-# 👾 ЛОГИКА БОССОВ
-# ==========================================
-
-@dp.callback_query(F.data == "main_bosses")
-async def bosses_main_select(callback: types.CallbackQuery):
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🟢 До-Хардмод", callback_data="list:pre_hm"))
-    builder.row(types.InlineKeyboardButton(text="🔴 Хардмод", callback_data="list:hm"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ В главное меню", callback_data="to_main"))
-    await callback.message.edit_text("👹 Выбери этап игры:", reply_markup=builder.as_markup())
-
-@dp.callback_query(F.data.startswith("list:"))
-async def show_boss_list(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("ev_l:"))
+async def events_list(callback: types.CallbackQuery):
     stage = callback.data.split(":")[1]
-    data = load_json('bosses.json')
+    data = get_data('events')[stage]
     builder = InlineKeyboardBuilder()
-    for key, boss in data[stage].items():
-        builder.row(types.InlineKeyboardButton(text=boss['name'], callback_data=f"select:{stage}:{key}"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_bosses"))
-    await callback.message.edit_text("👹 Выбери босса:", reply_markup=builder.as_markup())
+    for key, ev in data.items():
+        builder.row(types.InlineKeyboardButton(text=ev['name'], callback_data=f"ev_i:{stage}:{key}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_events"))
+    await callback.message.edit_text("🌊 **Выберите событие для тактического разбора:**", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data.startswith("select:"))
-async def boss_main_menu(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("ev_i:"))
+async def event_info(callback: types.CallbackQuery):
     _, stage, key = callback.data.split(":")
-    data = load_json('bosses.json')
-    boss = data[stage][key]
+    ev = get_data('events')[stage][key]
     
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🛡️ Экип", callback_data=f"gear_menu:{stage}:{key}"))
-    builder.row(
-        types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"info:{stage}:{key}:tactics"),
-        types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"info:{stage}:{key}:arena")
+    text = (
+        f"⚔️ **{ev['name']}**\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"🔥 **Сложность:** {ev.get('difficulty', '???')}\n"
+        f"💰 **Профит:** {ev.get('profit', '???')}\n\n"
+        f"📢 **Триггер:** {ev['trigger']}\n"
+        f"🌊 **Волны:** {ev['waves']}\n"
+        f"🎁 **Дроп:** {ev['drops']}\n\n"
+        f"🛠 **ТАКТИКА:** \n_{ev.get('arena_tip', 'Стандартная арена.')}_"
     )
-    builder.row(types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"info:{stage}:{key}:drops"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ К списку", callback_data=f"list:{stage}"))
     
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"ev_l:{stage}"))
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+
+# ==========================================
+# 👾 РАЗДЕЛ: БОССЫ
+# ==========================================
+@dp.callback_query(F.data == "m_bosses")
+async def bosses_main(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🟢 До-Хардмод", callback_data="b_l:pre_hm"),
+                types.InlineKeyboardButton(text="🔴 Хардмод", callback_data="b_l:hm"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Меню", callback_data="to_main"))
+    await callback.message.edit_text("👹 **Выберите категорию боссов:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("b_l:"))
+async def bosses_list(callback: types.CallbackQuery):
+    st = callback.data.split(":")[1]
+    data = get_data('bosses')[st]
+    builder = InlineKeyboardBuilder()
+    for k, v in data.items():
+        builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"b_s:{st}:{k}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_bosses"))
+    await callback.message.edit_text("🎯 **Выберите цель:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("b_s:"))
+async def boss_selected(callback: types.CallbackQuery):
+    _, st, k = callback.data.split(":")
+    boss = get_data('bosses')[st][k]
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🛡️ Экипировка", callback_data=f"b_g:{st}:{k}"),
+                types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"b_f:{st}:{k}:drops"))
+    builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{st}:{k}:tactics"),
+                types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"b_f:{st}:{k}:arena"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_l:{st}"))
     await callback.message.edit_text(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data.startswith("info:"))
-async def boss_info_field(callback: types.CallbackQuery):
-    _, stage, key, field = callback.data.split(":")
-    data = load_json('bosses.json')
-    text = data[stage][key].get(field, "Нет информации")
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"select:{stage}:{key}"))
-    await callback.message.edit_text(f"📝 **Информация:**\n\n{text}", reply_markup=builder.as_markup())
+@dp.callback_query(F.data.startswith("b_f:"))
+async def boss_field_info(callback: types.CallbackQuery):
+    _, st, k, fld = callback.data.split(":")
+    txt = get_data('bosses')[st][k].get(fld, "Данные обновляются...")
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}"))
+    await callback.message.edit_text(f"📝 **Информация:**\n\n{txt}", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data.startswith("gear_menu:"))
-async def gear_classes_menu(callback: types.CallbackQuery):
-    _, stage, key = callback.data.split(":")
+@dp.callback_query(F.data.startswith("b_g:"))
+async def boss_gear_menu(callback: types.CallbackQuery):
+    _, st, k = callback.data.split(":")
     builder = InlineKeyboardBuilder()
-    classes = {"warrior": "⚔️ Воин", "ranger": "🎯 Стрелок", "mage": "🔮 Маг", "summoner": "🐍 Призыв"}
-    for k, v in classes.items():
-        builder.row(types.InlineKeyboardButton(text=v, callback_data=f"class_gear:{stage}:{key}:{k}"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"select:{stage}:{key}"))
-    await callback.message.edit_text("🛡️ Для какого класса показать снаряжение?", reply_markup=builder.as_markup())
+    clss = {"warrior": "⚔️ Воин", "ranger": "🎯 Стрелок", "mage": "🔮 Маг", "summoner": "🐍 Призыв"}
+    for cid, name in clss.items():
+        builder.row(types.InlineKeyboardButton(text=name, callback_data=f"b_gc:{st}:{k}:{cid}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}"))
+    await callback.message.edit_text("🛡️ **Выберите свой класс:**", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data.startswith("class_gear:"))
-async def show_boss_gear_items(callback: types.CallbackQuery):
-    _, stage, key, class_id = callback.data.split(":")
-    data = load_json('bosses.json')
-    items = data[stage][key]['classes'][class_id]
+@dp.callback_query(F.data.startswith("b_gc:"))
+async def boss_gear_final(callback: types.CallbackQuery):
+    _, st, k, cid = callback.data.split(":")
+    items = get_data('bosses')[st][k]['classes'][cid]
     builder = InlineKeyboardBuilder()
     for i, item in enumerate(items):
-        builder.row(types.InlineKeyboardButton(text=item['name'], callback_data=f"bg_item:{stage}:{key}:{class_id}:{i}"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"gear_menu:{stage}:{key}"))
-    await callback.message.edit_text(f"🎒 **Рекомендации:**", reply_markup=builder.as_markup())
+        builder.row(types.InlineKeyboardButton(text=item['name'], callback_data=f"b_gi:{st}:{k}:{cid}:{i}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_g:{st}:{k}"))
+    await callback.message.edit_text("🎒 **Лучшие предметы для этого боя:**", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data.startswith("bg_item:"))
-async def boss_gear_craft(callback: types.CallbackQuery):
-    _, stage, key, class_id, index = callback.data.split(":")
-    data = load_json('bosses.json')
-    item = data[stage][key]['classes'][class_id][int(index)]
-    await callback.answer(f"🛠 {item['name']}:\n{item['craft']}", show_alert=True)
+@dp.callback_query(F.data.startswith("b_gi:"))
+async def boss_gear_alert(callback: types.CallbackQuery):
+    _, st, k, cid, i = callback.data.split(":")
+    item = get_data('bosses')[st][k]['classes'][cid][int(i)]
+    await callback.answer(f"🛠 {item['name']}\n{item['craft']}", show_alert=True)
 
 # ==========================================
-# 👥 ЛОГИКА NPC
+# 🛡️ РАЗДЕЛ: КЛАССЫ
 # ==========================================
-
-@dp.callback_query(F.data == "main_npcs")
-async def npc_main_menu(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "m_classes")
+async def classes_menu(callback: types.CallbackQuery):
+    data = get_data('classes')
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="📜 Список NPC", callback_data="npc_list"))
-    builder.row(types.InlineKeyboardButton(text="📊 Таблица цен", callback_data="npc_prices"))
-    builder.row(types.InlineKeyboardButton(text="🏡 Советы", callback_data="npc_tips"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ В главное меню", callback_data="to_main"))
+    for k, v in data.items():
+        builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"cl_s:{k}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main"))
+    await callback.message.edit_text("🛡️ **Выберите класс для изучения билда:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("cl_s:"))
+async def class_stages(callback: types.CallbackQuery):
+    cid = callback.data.split(":")[1]
+    builder = InlineKeyboardBuilder()
+    sts = {"start": "🟢 Старт", "pre_hm": "🟡 До ХМ", "hm_start": "🔴 Ранний ХМ", "endgame": "🟣 Финал"}
+    for k, v in sts.items():
+        builder.add(types.InlineKeyboardButton(text=v, callback_data=f"cl_c:{cid}:{k}"))
+    builder.adjust(2).row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_classes"))
+    await callback.message.edit_text("📅 **Выберите этап прохождения:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("cl_c:"))
+async def class_cats(callback: types.CallbackQuery):
+    _, cid, sid = callback.data.split(":")
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🛡️ Броня", callback_data=f"cl_i:{cid}:{sid}:armor"),
+                types.InlineKeyboardButton(text="⚔️ Оружие", callback_data=f"cl_i:{cid}:{sid}:weapons"))
+    builder.row(types.InlineKeyboardButton(text="💍 Аксессуары", callback_data=f"cl_i:{cid}:{sid}:accessories"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cl_s:{cid}"))
+    await callback.message.edit_text("Что будем смотреть?", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("cl_i:"))
+async def class_items_list(callback: types.CallbackQuery):
+    _, cid, sid, cat = callback.data.split(":")
+    data = get_data('classes')[cid]['stages'][sid][cat]
+    builder = InlineKeyboardBuilder()
+    for i, itm in enumerate(data):
+        builder.row(types.InlineKeyboardButton(text=itm['name'], callback_data=f"cl_inf:{cid}:{sid}:{cat}:{i}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cl_c:{cid}:{sid}"))
+    await callback.message.edit_text("🎒 **Выбери предмет для инфо:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("cl_inf:"))
+async def class_item_alert(callback: types.CallbackQuery):
+    _, cid, sid, cat, i = callback.data.split(":")
+    itm = get_data('classes')[cid]['stages'][sid][cat][int(i)]
+    await callback.answer(f"🛠 {itm['name']}\n{itm['info']}", show_alert=True)
+
+# ==========================================
+# 👥 РАЗДЕЛ: NPC
+# ==========================================
+@dp.callback_query(F.data == "m_npcs")
+async def npc_main(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"),
+                types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main"))
     await callback.message.edit_text("👥 **Справочник NPC**", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data == "npc_prices")
-async def npc_prices_table(callback: types.CallbackQuery):
-    text = "📊 **Таблица Счастья:**\n\n❤️ Восторг (75% цены, Пилон)\n😊 Доволен (88% цены, Пилон)\n😐 Норма (100%)\n☹️ Грусть (112%)\n😡 Ярость (150%)"
+@dp.callback_query(F.data == "n_list")
+async def npc_list_all(callback: types.CallbackQuery):
+    npcs = get_data('npcs')['npcs']
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_npcs"))
-    await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    for n in npcs:
+        builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"n_i:{n['name']}"))
+    builder.adjust(2).row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
+    await callback.message.edit_text("👤 **Выберите NPC:**", reply_markup=builder.as_markup())
 
-@dp.callback_query(F.data == "npc_tips")
-async def npc_tips_show(callback: types.CallbackQuery):
-    text = "🏡 **Связки:**\n\n🔫 Пустыня: Оружейник + Медсестра\n🛠️ Снега: Механик + Гоблин\n🍄 Грибы: Трюфель + Гид"
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_npcs"))
-    await callback.message.edit_text(text, reply_markup=builder.as_markup())
-
-@dp.callback_query(F.data == "npc_list")
-async def show_npc_names(callback: types.CallbackQuery):
-    data = load_json('npcs.json')
-    builder = InlineKeyboardBuilder()
-    for npc in data.get('npcs', []):
-        builder.add(types.InlineKeyboardButton(text=npc['name'], callback_data=f"npc_info:{npc['name']}"))
-    builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_npcs"))
-    await callback.message.edit_text("👤 Выбери жителя:", reply_markup=builder.as_markup())
-
-@dp.callback_query(F.data.startswith("npc_info:"))
+@dp.callback_query(F.data.startswith("n_i:"))
 async def npc_detail(callback: types.CallbackQuery):
     name = callback.data.split(":")[1]
-    data = load_json('npcs.json')
-    npc = next((n for n in data['npcs'] if n['name'] == name), None)
-    text = f"👤 **{npc['name']}**\n📍 Биом: {npc.get('biome', '?')}\n❤️ Любит: {npc.get('loves', '-')}\n😊 Нравится: {npc.get('likes', '-')}"
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="npc_list"))
-    await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    npc = next(n for n in get_data('npcs')['npcs'] if n['name'] == name)
+    txt = f"👤 **{npc['name']}**\n📍 Биом: {npc['biome']}\n❤️ Любит: {npc['loves']}\n😊 Нравится: {npc['likes']}"
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="n_list"))
+    await callback.message.edit_text(txt, reply_markup=builder.as_markup())
+
+# ==========================================
+# 🎲 РАНДОМАЙЗЕР
+# ==========================================
+@dp.callback_query(F.data == "m_random")
+async def random_challenge(callback: types.CallbackQuery):
+    chals = [
+        "🏹 **Стрелок-Робингуд:** Только луки. Никакого огнестрела!",
+        "⚔️ **Истинный Рыцарь:** Только мечи без снарядов (True Melee).",
+        "🎣 **Рыбак-Воин:** Можно использовать только снаряжение из рыбалки.",
+        "💣 **Подрывник:** Убивай боссов только взрывчаткой (бомбы, динамит).",
+        "🌵 **Друид:** Используй только снаряжение, связанное с растениями.",
+        "🧙 **Гарри Поттер:** Только магические жезлы. Без книг."
+    ]
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🎲 Еще раз", callback_data="m_random"),
+                                          types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main"))
+    await callback.message.edit_text(f"🎲 **Твой челлендж:**\n\n{random.choice(chals)}", reply_markup=builder.as_markup())
 
 # --- ЗАПУСК ---
 async def main():
-    try:
-        await dp.start_polling(bot)
-    except Exception as e:
-        logging.error(f"Ошибка: {e}")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
