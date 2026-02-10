@@ -21,6 +21,19 @@ class CalcState(StatesGroup):
     wait_goblin_price = State()
     wait_ore_count = State()
 
+class AlchemyStates(StatesGroup):
+    choosing_ingredients = State()
+
+# --- ДАННЫЕ ДЛЯ АЛХИМИИ (Интерактив) ---
+RECIPES = {
+    ("Дневноцвет", "Руда"): "🛡️ Зелье железной кожи (+8 защиты)",
+    ("Дневноцвет", "Гриб"): "❤️ Зелье регенерации",
+    ("Дневноцвет", "Линза"): "🏹 Зелье лучника",
+    ("Луноцвет", "Рыба-призрак"): "👻 Зелье невидимости",
+    ("Луноцвет", "Падшая звезда"): "🔮 Зелье регенерации маны",
+    ("Смертоцвет", "Гемопшик"): "💢 Зелье ярости (+10% крита)",
+}
+
 # --- ЗАГРУЗКА ДАННЫХ ---
 def get_data(filename):
     try:
@@ -43,7 +56,8 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
                 types.InlineKeyboardButton(text="👥 NPC", callback_data="m_npcs"))
     builder.row(types.InlineKeyboardButton(text="🧮 Калькулятор", callback_data="m_calc"),
                 types.InlineKeyboardButton(text="🎣 Рыбалка", callback_data="m_fishing"))
-    builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
+    builder.row(types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"),
+                types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
     await message.answer(
         "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я помогу тебе подготовиться к любой угрозе. Выбери раздел:",
@@ -54,6 +68,90 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     await cmd_start(callback.message, state)
+
+# ==========================================
+# 🧪 РАЗДЕЛ: АЛХИМИЯ (ИНТЕРАКТИВНЫЙ КОТЁЛ)
+# ==========================================
+@dp.callback_query(F.data == "m_alchemy")
+async def alchemy_main(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🔮 Варить зелье", callback_data="alc_craft"))
+    builder.row(types.InlineKeyboardButton(text="📜 Книга рецептов", callback_data="alc_book"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Меню", callback_data="to_main"))
+    await callback.message.edit_text(
+        "✨ **Алхимическая лаборатория**\n\nЗдесь ты можешь испытать удачу в варке или изучить готовые наборы для боя.",
+        reply_markup=builder.as_markup()
+    )
+
+@dp.callback_query(F.data == "alc_craft")
+async def start_crafting(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(AlchemyStates.choosing_ingredients)
+    await state.update_data(mix=[])
+    
+    builder = InlineKeyboardBuilder()
+    ingredients = ["Дневноцвет", "Луноцвет", "Смертоцвет", "Гриб", "Руда", "Линза", "Падшая звезда", "Рыба-призрак"]
+    for ing in ingredients:
+        builder.add(types.InlineKeyboardButton(text=ing, callback_data=f"ing:{ing}"))
+    
+    builder.adjust(2)
+    builder.row(types.InlineKeyboardButton(text="🔥 Начать варку!", callback_data="alc_mix"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_alchemy"))
+    
+    await callback.message.edit_text("🌿 **Бросай ингредиенты в котёл (выбери 2):**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("ing:"))
+async def add_ingredient(callback: types.CallbackQuery, state: FSMContext):
+    ing = callback.data.split(":")[1]
+    data = await state.get_data()
+    mix = data.get('mix', [])
+    
+    if len(mix) < 2:
+        if ing not in mix:
+            mix.append(ing)
+            await state.update_data(mix=mix)
+            await callback.answer(f"Добавлено: {ing}")
+        else:
+            await callback.answer("Этот ингредиент уже в котле!", show_alert=True)
+    else:
+        await callback.answer("Котёл полон! Жми 'Начать варку!'", show_alert=True)
+
+@dp.callback_query(F.data == "alc_mix")
+async def final_mix(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    mix = data.get('mix', [])
+    
+    if len(mix) < 2:
+        await callback.answer("Нужно минимум 2 ингредиента!", show_alert=True)
+        return
+
+    mix_tuple = tuple(sorted(mix))
+    result = RECIPES.get(mix_tuple, "💥 Ба-бах! Получилась бесполезная жижа... Ингредиенты не подошли.")
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="🔄 Сварить еще", callback_data="alc_craft"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ В алхимию", callback_data="m_alchemy"))
+    
+    await callback.message.edit_text(f"🧪 **Результат варки:**\n\n{result}", reply_markup=builder.as_markup())
+    await state.clear()
+
+@dp.callback_query(F.data == "alc_book")
+async def alchemy_book(callback: types.CallbackQuery):
+    data = get_data('alchemy').get('sets', {})
+    builder = InlineKeyboardBuilder()
+    for key, s in data.items():
+        builder.row(types.InlineKeyboardButton(text=s['name'], callback_data=f"alc_s:{key}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_alchemy"))
+    await callback.message.edit_text("📜 **Книга проверенных рецептов:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("alc_s:"))
+async def alchemy_set_details(callback: types.CallbackQuery):
+    set_key = callback.data.split(":")[1]
+    alc_set = get_data('alchemy')['sets'][set_key]
+    text = f"🧪 **Сет: {alc_set['name']}**\n━━━━━━━━━━━━━━\n\n"
+    for p in alc_set['potions']:
+        text += f"🔹 **{p['name']}**\n└ ✨ Эффект: {p['effect']}\n└ 🛠 Рецепт: {p['recipe']}\n\n"
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="alc_book"))
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 # ==========================================
 # 🎲 РАНДОМАЙЗЕР (ОБНОВЛЕНО: ПОДРОБНЫЕ КВЕСТЫ)
