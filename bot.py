@@ -3,6 +3,7 @@ import json
 import logging
 import asyncio
 import random
+import aiohttp  # Добавлено для работы с API
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -23,6 +24,10 @@ class CalcState(StatesGroup):
 
 class AlchemyStates(StatesGroup):
     choosing_ingredients = State()
+
+# Новое состояние для поиска по Вики
+class SearchStates(StatesGroup):
+    wait_for_query = State()
 
 # --- ДАННЫЕ ДЛЯ АЛХИМИИ (Интерактив) ---
 RECIPES = {
@@ -101,7 +106,9 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
                 types.InlineKeyboardButton(text="🎣 Рыбалка", callback_data="m_fishing"))
     builder.row(types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"),
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
-    builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
+    # Заменил рандомайзер на поиск для удобства, или можно добавить новую строку
+    builder.row(types.InlineKeyboardButton(text="🔍 Вики-поиск", callback_data="m_wiki"),
+                types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
     text = "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я помогу тебе подготовиться к любой угрозе. Выбери раздел:"
     
@@ -113,6 +120,60 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext = None):
     await cmd_start(callback, state)
+
+# ==========================================
+# 🌐 РАЗДЕЛ: ВИКИ-ПОИСК (НОВОЕ!)
+# ==========================================
+@dp.callback_query(F.data == "m_wiki")
+async def wiki_search_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(SearchStates.wait_for_query)
+    await callback.message.edit_text("🌐 **Подключение к Terraria Wiki...**\n\nВведите название предмета (например: *Зенит*, *Мурамаса*, *Крылья*):", parse_mode="Markdown")
+
+@dp.message(SearchStates.wait_for_query)
+async def wiki_search_proc(message: types.Message, state: FSMContext):
+    query = message.text.strip()
+    # Используем API русской википедии Фэндома
+    url = "https://terraria.fandom.com/ru/api.php"
+    params = {
+        "action": "query",
+        "format": "json",
+        "prop": "extracts|info",
+        "inprop": "url",
+        "exintro": True,
+        "explaintext": True,
+        "titles": query,
+        "redirects": 1
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as resp:
+            data = await resp.json()
+            pages = data.get("query", {}).get("pages", {})
+            page_id = next(iter(pages))
+            
+            if page_id == "-1":
+                await message.answer("❌ **Предмет не найден.**\nПопробуйте написать точное название с большой буквы или проверьте раскладку.", 
+                                     reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_wiki")).as_markup())
+            else:
+                page_data = pages[page_id]
+                title = page_data.get("title")
+                extract = page_data.get("extract", "Описание отсутствует.")
+                full_url = page_data.get("fullurl")
+                
+                # Обрезаем слишком длинный текст
+                summary = (extract[:500] + '...') if len(extract) > 500 else extract
+                
+                text = (f"📖 **{title}**\n\n{summary}\n\n"
+                        f"🛠 **Рецепты и детали доступны на Вики:**")
+                
+                builder = InlineKeyboardBuilder()
+                builder.row(types.InlineKeyboardButton(text="🔗 Открыть Wiki", url=full_url))
+                builder.row(types.InlineKeyboardButton(text="🔍 Искать еще", callback_data="m_wiki"))
+                builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
+                
+                await message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+    
+    await state.clear()
 
 # ==========================================
 # 📋 РАЗДЕЛ: МАСШТАБНЫЙ ЧЕК-ЛИСТ
