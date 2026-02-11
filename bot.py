@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
+# Railway подтянет токен из переменных окружения
 TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
 
 bot = Bot(token=TOKEN)
@@ -85,7 +86,10 @@ CHECKLIST_DATA = {
 # --- ЗАГРУЗКА ДАННЫХ ---
 def get_data(filename):
     try:
-        with open(f'data/{filename}.json', 'r', encoding='utf-8') as f:
+        # Railway требует правильных путей. Если файлы в папке data:
+        base_path = os.path.dirname(__file__)
+        full_path = os.path.join(base_path, 'data', f'{filename}.json')
+        with open(full_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
         logging.error(f"Ошибка загрузки {filename}: {e}")
@@ -106,7 +110,6 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
                 types.InlineKeyboardButton(text="🎣 Рыбалка", callback_data="m_fishing"))
     builder.row(types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"),
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
-    # Заменил рандомайзер на поиск для удобства, или можно добавить новую строку
     builder.row(types.InlineKeyboardButton(text="🔍 Вики-поиск", callback_data="m_wiki"),
                 types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
@@ -122,7 +125,7 @@ async def back_to_main(callback: types.CallbackQuery, state: FSMContext = None):
     await cmd_start(callback, state)
 
 # ==========================================
-# 🌐 РАЗДЕЛ: ВИКИ-ПОИСК (НОВОЕ!)
+# 🌐 РАЗДЕЛ: ВИКИ-ПОИСК
 # ==========================================
 @dp.callback_query(F.data == "m_wiki")
 async def wiki_search_start(callback: types.CallbackQuery, state: FSMContext):
@@ -132,7 +135,7 @@ async def wiki_search_start(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(SearchStates.wait_for_query)
 async def wiki_search_proc(message: types.Message, state: FSMContext):
     query = message.text.strip()
-    # Используем API русской википедии Фэндома
+    # Используем API русской википедии Фэндома (Terraria Wiki)
     url = "https://terraria.fandom.com/ru/api.php"
     params = {
         "action": "query",
@@ -146,32 +149,35 @@ async def wiki_search_proc(message: types.Message, state: FSMContext):
     }
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as resp:
-            data = await resp.json()
-            pages = data.get("query", {}).get("pages", {})
-            page_id = next(iter(pages))
-            
-            if page_id == "-1":
-                await message.answer("❌ **Предмет не найден.**\nПопробуйте написать точное название с большой буквы или проверьте раскладку.", 
-                                     reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_wiki")).as_markup())
-            else:
-                page_data = pages[page_id]
-                title = page_data.get("title")
-                extract = page_data.get("extract", "Описание отсутствует.")
-                full_url = page_data.get("fullurl")
+        try:
+            async with session.get(url, params=params) as resp:
+                data = await resp.json()
+                pages = data.get("query", {}).get("pages", {})
+                page_id = next(iter(pages))
                 
-                # Обрезаем слишком длинный текст
-                summary = (extract[:500] + '...') if len(extract) > 500 else extract
-                
-                text = (f"📖 **{title}**\n\n{summary}\n\n"
-                        f"🛠 **Рецепты и детали доступны на Вики:**")
-                
-                builder = InlineKeyboardBuilder()
-                builder.row(types.InlineKeyboardButton(text="🔗 Открыть Wiki", url=full_url))
-                builder.row(types.InlineKeyboardButton(text="🔍 Искать еще", callback_data="m_wiki"))
-                builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-                
-                await message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+                if page_id == "-1":
+                    await message.answer("❌ **Предмет не найден.**\nПопробуйте написать точное название или проверьте раскладку.", 
+                                         reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_wiki")).as_markup())
+                else:
+                    page_data = pages[page_id]
+                    title = page_data.get("title")
+                    extract = page_data.get("extract", "Описание отсутствует.")
+                    full_url = page_data.get("fullurl")
+                    
+                    summary = (extract[:500] + '...') if len(extract) > 500 else extract
+                    
+                    text = (f"📖 **{title}**\n\n{summary}\n\n"
+                            f"🛠 **Рецепты и детали доступны на Вики:**")
+                    
+                    builder = InlineKeyboardBuilder()
+                    builder.row(types.InlineKeyboardButton(text="🔗 Открыть Wiki", url=full_url))
+                    builder.row(types.InlineKeyboardButton(text="🔍 Искать еще", callback_data="m_wiki"))
+                    builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
+                    
+                    await message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+        except Exception as e:
+            logging.error(f"Search error: {e}")
+            await message.answer("❌ Произошла ошибка при поиске.")
     
     await state.clear()
 
@@ -373,7 +379,7 @@ async def bosses_main(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("b_l:"))
 async def bosses_list(callback: types.CallbackQuery):
     st = callback.data.split(":")[1]
-    data = get_data('bosses')[st]
+    data = get_data('bosses').get(st, {})
     builder = InlineKeyboardBuilder()
     for k, v in data.items():
         builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"b_s:{st}:{k}"))
@@ -413,7 +419,7 @@ async def boss_gear_menu(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("b_gc:"))
 async def boss_gear_final(callback: types.CallbackQuery):
     _, st, k, cid = callback.data.split(":")
-    items = get_data('bosses')[st][k]['classes'][cid]
+    items = get_data('bosses')[st][k]['classes'].get(cid, [])
     builder = InlineKeyboardBuilder()
     for i, item in enumerate(items):
         builder.row(types.InlineKeyboardButton(text=item['name'], callback_data=f"b_gi:{st}:{k}:{cid}:{i}"))
@@ -424,7 +430,9 @@ async def boss_gear_final(callback: types.CallbackQuery):
 async def boss_gear_alert(callback: types.CallbackQuery):
     _, st, k, cid, i = callback.data.split(":")
     item = get_data('bosses')[st][k]['classes'][cid][int(i)]
-    await callback.answer(f"🛠 {item['name']}\n{item['craft']}", show_alert=True)
+    # Исправлено: если в JSON нет поля 'craft', выводим 'Инфо'
+    craft_info = item.get('craft') or item.get('info', 'Нет деталей')
+    await callback.answer(f"🛠 {item['name']}\n{craft_info}", show_alert=True)
 
 # ==========================================
 # ⚔️ РАЗДЕЛ: СОБЫТИЯ
@@ -440,7 +448,7 @@ async def events_main(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("ev_l:"))
 async def events_list(callback: types.CallbackQuery):
     stage = callback.data.split(":")[1]
-    data = get_data('events')[stage]
+    data = get_data('events').get(stage, {})
     builder = InlineKeyboardBuilder()
     for key, ev in data.items():
         builder.row(types.InlineKeyboardButton(text=ev['name'], callback_data=f"ev_i:{stage}:{key}"))
@@ -494,7 +502,7 @@ async def class_cats(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("cl_i:"))
 async def class_items_list(callback: types.CallbackQuery):
     _, cid, sid, cat = callback.data.split(":")
-    data = get_data('classes')[cid]['stages'][sid][cat]
+    data = get_data('classes')[cid]['stages'][sid].get(cat, [])
     builder = InlineKeyboardBuilder()
     for i, itm in enumerate(data):
         builder.row(types.InlineKeyboardButton(text=itm['name'], callback_data=f"cl_inf:{cid}:{sid}:{cat}:{i}"))
@@ -508,7 +516,7 @@ async def class_item_alert(callback: types.CallbackQuery):
     await callback.answer(f"🛠 {itm['name']}\n{itm['info']}", show_alert=True)
 
 # ==========================================
-# 👥 РАЗДЕЛ: NPC (С КАЛЬКУЛЯТОРОМ СЧАСТЬЯ)
+# 👥 РАЗДЕЛ: NPC
 # ==========================================
 @dp.callback_query(F.data == "m_npcs")
 async def npc_main(callback: types.CallbackQuery):
@@ -516,11 +524,11 @@ async def npc_main(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="📜 Список и Счастье", callback_data="n_list"),
                 types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text("👥 **Справочник NPC**\n\nВыбери персонажа, чтобы узнать его предпочтения и множители цен.", reply_markup=builder.as_markup())
+    await callback.message.edit_text("👥 **Справочник NPC**\n\nВыбери персонажа, чтобы узнать его предпочтения.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "n_list")
 async def npc_list_all(callback: types.CallbackQuery):
-    npcs = get_data('npcs')['npcs']
+    npcs = get_data('npcs').get('npcs', [])
     builder = InlineKeyboardBuilder()
     for n in npcs:
         builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"n_i:{n['name']}"))
@@ -532,18 +540,16 @@ async def npc_detail(callback: types.CallbackQuery):
     name = callback.data.split(":")[1]
     npc = next(n for n in get_data('npcs')['npcs'] if n['name'] == name)
     
-    # Калькуляция счастья для вывода
     txt = (f"👤 **{npc['name']}**\n"
            f"━━━━━━━━━━━━━━\n"
            f"📥 **Приход:** {npc.get('arrival', 'Стандарт')}\n"
            f"📍 **Биом:** {npc['biome']}\n"
            f"🎁 **Бонус:** {npc.get('bonus', 'Нет')}\n\n"
-           f"📊 **Счастье (Множитель цен):**\n"
-           f"😍 **Любит:** {npc['loves']} (0.88x)\n"
-           f"😊 **Нравится:** {npc['likes']} (0.94x)\n"
-           f"😐 **Не любит:** {npc['dislikes']} (1.06x)\n"
-           f"😡 **Ненавидит:** {npc['hates']} (1.12x)\n\n"
-           f"💡 *Совет: Сели в биом {npc['biome']} рядом с {npc['loves']} для макс. скидки!*")
+           f"📊 **Счастье:**\n"
+           f"😍 **Любит:** {npc['loves']}\n"
+           f"😊 **Нравится:** {npc['likes']}\n"
+           f"😐 **Не любит:** {npc['dislikes']}\n"
+           f"😡 **Ненавидит:** {npc['hates']}\n")
            
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="n_list"))
     await callback.message.edit_text(txt, reply_markup=builder.as_markup())
