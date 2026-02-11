@@ -86,7 +86,6 @@ CHECKLIST_DATA = {
 # --- ЗАГРУЗКА ДАННЫХ ---
 def get_data(filename):
     try:
-        # Railway требует правильных путей. Если файлы в папке data:
         base_path = os.path.dirname(__file__)
         full_path = os.path.join(base_path, 'data', f'{filename}.json')
         with open(full_path, 'r', encoding='utf-8') as f:
@@ -135,7 +134,6 @@ async def wiki_search_start(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(SearchStates.wait_for_query)
 async def wiki_search_proc(message: types.Message, state: FSMContext):
     query = message.text.strip()
-    # Используем API русской википедии Фэндома (Terraria Wiki)
     url = "https://terraria.fandom.com/ru/api.php"
     params = {
         "action": "query",
@@ -430,7 +428,6 @@ async def boss_gear_final(callback: types.CallbackQuery):
 async def boss_gear_alert(callback: types.CallbackQuery):
     _, st, k, cid, i = callback.data.split(":")
     item = get_data('bosses')[st][k]['classes'][cid][int(i)]
-    # Исправлено: если в JSON нет поля 'craft', выводим 'Инфо'
     craft_info = item.get('craft') or item.get('info', 'Нет деталей')
     await callback.answer(f"🛠 {item['name']}\n{craft_info}", show_alert=True)
 
