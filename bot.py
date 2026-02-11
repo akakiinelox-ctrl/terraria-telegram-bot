@@ -111,7 +111,7 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
         await message.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "to_main")
-async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
+async def back_to_main(callback: types.CallbackQuery, state: FSMContext = None):
     await cmd_start(callback, state)
 
 # ==========================================
@@ -447,15 +447,15 @@ async def class_item_alert(callback: types.CallbackQuery):
     await callback.answer(f"🛠 {itm['name']}\n{itm['info']}", show_alert=True)
 
 # ==========================================
-# 👥 РАЗДЕЛ: NPC
+# 👥 РАЗДЕЛ: NPC (С КАЛЬКУЛЯТОРОМ СЧАСТЬЯ)
 # ==========================================
 @dp.callback_query(F.data == "m_npcs")
 async def npc_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"),
+    builder.row(types.InlineKeyboardButton(text="📜 Список и Счастье", callback_data="n_list"),
                 types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text("👥 **Справочник NPC**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("👥 **Справочник NPC**\n\nВыбери персонажа, чтобы узнать его предпочтения и множители цен.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "n_list")
 async def npc_list_all(callback: types.CallbackQuery):
@@ -470,13 +470,20 @@ async def npc_list_all(callback: types.CallbackQuery):
 async def npc_detail(callback: types.CallbackQuery):
     name = callback.data.split(":")[1]
     npc = next(n for n in get_data('npcs')['npcs'] if n['name'] == name)
+    
+    # Калькуляция счастья для вывода
     txt = (f"👤 **{npc['name']}**\n"
            f"━━━━━━━━━━━━━━\n"
            f"📥 **Приход:** {npc.get('arrival', 'Стандарт')}\n"
            f"📍 **Биом:** {npc['biome']}\n"
            f"🎁 **Бонус:** {npc.get('bonus', 'Нет')}\n\n"
-           f"❤️ **Любит:** {npc['loves']}\n"
-           f"😊 **Нравится:** {npc['likes']}\n")
+           f"📊 **Счастье (Множитель цен):**\n"
+           f"😍 **Любит:** {npc['loves']} (0.88x)\n"
+           f"😊 **Нравится:** {npc['likes']} (0.94x)\n"
+           f"😐 **Не любит:** {npc['dislikes']} (1.06x)\n"
+           f"😡 **Ненавидит:** {npc['hates']} (1.12x)\n\n"
+           f"💡 *Совет: Сели в биом {npc['biome']} рядом с {npc['loves']} для макс. скидки!*")
+           
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="n_list"))
     await callback.message.edit_text(txt, reply_markup=builder.as_markup())
 
