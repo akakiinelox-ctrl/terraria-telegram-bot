@@ -87,12 +87,15 @@ def get_data(filename):
         return {}
 
 # ==========================================
-# 🛠 ТЕХНИЧЕСКАЯ ФУНКЦИЯ (ПОЛУЧЕНИЕ ID ВИДЕО)
+# 🛠 ТЕХНИЧЕСКАЯ ФУНКЦИЯ (ПОЛУЧЕНИЕ ID ФОТО/ВИДЕО)
 # ==========================================
+@dp.message(F.photo)
+async def get_photo_id(message: types.Message):
+    await message.answer(f"🖼 **ID фото:**\n\n`{message.photo[-1].file_id}`", parse_mode="Markdown")
+
 @dp.message(F.video)
 async def get_video_id(message: types.Message):
-    # Просто отправь боту видео, и он скажет его ID для вставки в JSON
-    await message.answer(f"📹 **ID твоего видео:**\n\n`{message.video.file_id}`", parse_mode="Markdown")
+    await message.answer(f"📹 **ID видео:**\n\n`{message.video.file_id}`", parse_mode="Markdown")
 
 # ==========================================
 # 🏠 ГЛАВНОЕ МЕНЮ
@@ -307,7 +310,7 @@ async def random_challenge(callback: types.CallbackQuery):
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 # ==========================================
-# 👾 РАЗДЕЛ: БОССЫ (С ПОДДЕРЖКОЙ ВИДЕО)
+# 👾 РАЗДЕЛ: БОССЫ (С ПОДДЕРЖКОЙ ФОТО)
 # ==========================================
 @dp.callback_query(F.data == "m_bosses")
 async def bosses_main(callback: types.CallbackQuery):
@@ -336,11 +339,11 @@ async def boss_selected(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="🛡️ Экипировка", callback_data=f"b_g:{st}:{k}"),
                 types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"b_f:{st}:{k}:drops"))
     builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{st}:{k}:tactics"),
-                types.InlineKeyboardButton(text="🏟️ Арена (Видео)", callback_data=f"b_f:{st}:{k}:arena"))
+                types.InlineKeyboardButton(text="🏟️ Арена (Схема)", callback_data=f"b_f:{st}:{k}:arena"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_l:{st}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
     
-    # Пытаемся редактировать, если была картинка/видео - удаляем и шлем заново
+    # Пытаемся редактировать, если была картинка (ошибка edit_text) - удаляем и шлем текст заново
     try:
         await callback.message.edit_text(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup(), parse_mode="Markdown")
     except:
@@ -357,26 +360,22 @@ async def boss_field_info(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад к боссу", callback_data=f"b_s:{st}:{k}"))
     
-    # ЕСЛИ ЭТО АРЕНА И ЕСТЬ ВИДЕО
-    if fld == "arena":
-        await callback.message.delete() # Удаляем старое меню
-        
-        if "arena_video" in data and data["arena_video"]:
-            try:
-                await callback.message.answer_video(
-                    video=data["arena_video"],
-                    caption=f"🏟️ **Видео-гайд по арене:**\n\n{txt}",
-                    reply_markup=builder.as_markup(),
-                    parse_mode="Markdown"
-                )
-                return
-            except Exception as e:
-                logging.error(f"Ошибка видео: {e}")
-                
-        # Если видео нет или ошибка - просто текст
-        await callback.message.answer(f"🏟️ **Схема Арены:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    # ЕСЛИ ЭТО АРЕНА И ЕСТЬ КАРТИНКА В JSON
+    if fld == "arena" and "arena_img" in data and data["arena_img"]:
+        await callback.message.delete() # Удаляем текстовое меню
+        try:
+            await callback.message.answer_photo(
+                photo=data["arena_img"],
+                caption=f"🏟️ **Схема Арены:**\n\n{txt}",
+                reply_markup=builder.as_markup(),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            # Если картинка битая, шлем текст
+            logging.error(f"Ошибка фото: {e}")
+            await callback.message.answer(f"🏟️ **Схема Арены:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
     else:
-        # Для остальных разделов (Дроп, Тактика)
+        # Для обычных текстовых полей
         await callback.message.edit_text(f"📝 **Информация:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("b_g:"))
