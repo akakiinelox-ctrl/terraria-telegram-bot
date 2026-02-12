@@ -3,8 +3,9 @@ import json
 import logging
 import asyncio
 import random
+from datetime import datetime # <--- Добавлено для дат
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject # <--- Добавлено CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -12,6 +13,7 @@ from aiogram.fsm.context import FSMContext
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
+ADMIN_ID = 123456789 # <--- ЗАМЕНИ НА СВОЙ ID (чтобы смотреть /stats)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -86,6 +88,61 @@ def get_data(filename):
         logging.error(f"Ошибка загрузки {filename}: {e}")
         return {}
 
+# --- СОХРАНЕНИЕ ПОЛЬЗОВАТЕЛЕЙ (АНАЛИТИКА) ---
+def save_user(user_id, username, source="organic"):
+    users = get_data('users')
+    user_id = str(user_id)
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if user_id not in users:
+        users[user_id] = {
+            "username": username,
+            "join_date": today,
+            "source": source,
+            "last_active": today,
+            "activity_count": 1
+        }
+    else:
+        users[user_id]["last_active"] = today
+        users[user_id]["activity_count"] = users[user_id].get("activity_count", 0) + 1
+        users[user_id]["username"] = username # Обновляем ник если сменил
+
+    try:
+        with open('data/users.json', 'w', encoding='utf-8') as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logging.error(f"Ошибка сохранения юзера: {e}")
+
+# ==========================================
+# 📊 АДМИН-ПАНЕЛЬ (СТАТИСТИКА)
+# ==========================================
+@dp.message(Command("stats"))
+async def admin_stats(message: types.Message):
+    # Если хочешь закрыть команду от чужих, раскомментируй строку ниже:
+    # if message.from_user.id != ADMIN_ID: return
+
+    users = get_data('users')
+    total = len(users)
+    sources = {}
+    active_today = 0
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    for u in users.values():
+        src = u.get("source", "organic")
+        sources[src] = sources.get(src, 0) + 1
+        if u.get("last_active") == today_str:
+            active_today += 1
+
+    text = (f"📊 **Статистика Бота:**\n\n"
+            f"👥 Всего людей: **{total}**\n"
+            f"🔥 Активны сегодня: **{active_today}**\n\n"
+            f"📢 **Источники:**\n")
+    
+    for src, count in sources.items():
+        text += f"• {src}: {count}\n"
+
+    await message.answer(text, parse_mode="Markdown")
+
 # ==========================================
 # 🛠 ТЕХНИЧЕСКАЯ ФУНКЦИЯ (ПОЛУЧЕНИЕ ID ФОТО/ВИДЕО)
 # ==========================================
@@ -101,8 +158,14 @@ async def get_video_id(message: types.Message):
 # 🏠 ГЛАВНОЕ МЕНЮ
 # ==========================================
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext = None):
+async def cmd_start(message: types.Message, command: CommandObject, state: FSMContext = None):
     if state: await state.clear()
+    
+    # --- ТРЕКИНГ ---
+    ref_source = command.args if command.args else "organic"
+    save_user(message.from_user.id, message.from_user.username, ref_source)
+    # ---------------
+
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
                 types.InlineKeyboardButton(text="⚔️ События", callback_data="m_events"))
@@ -123,7 +186,9 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
 
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
-    await cmd_start(callback, state)
+    # Обновляем активность
+    save_user(callback.from_user.id, callback.from_user.username)
+    await cmd_start(callback.message, CommandObject(prefix="/", command="start", args=None), state)
 
 # ==========================================
 # 📋 РАЗДЕЛ: МАСШТАБНЫЙ ЧЕК-ЛИСТ
