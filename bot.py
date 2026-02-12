@@ -24,7 +24,7 @@ class CalcState(StatesGroup):
 class AlchemyStates(StatesGroup):
     choosing_ingredients = State()
 
-# --- ДАННЫЕ ДЛЯ АЛХИМИИ (Интерактив) ---
+# --- ДАННЫЕ ДЛЯ АЛХИМИИ ---
 RECIPES = {
     ("Дневноцвет", "Руда"): "🛡️ Зелье железной кожи (+8 защиты)",
     ("Дневноцвет", "Гриб"): "❤️ Зелье регенерации",
@@ -34,7 +34,7 @@ RECIPES = {
     ("Смертоцвет", "Гемопшик"): "💢 Зелье ярости (+10% крита)",
 }
 
-# --- ДАННЫЕ МАСШТАБНОГО ЧЕК-ЛИСТА ---
+# --- ДАННЫЕ ЧЕК-ЛИСТА ---
 CHECKLIST_DATA = {
     "start": {
         "name": "🌱 Начало (Pre-Boss)",
@@ -85,6 +85,14 @@ def get_data(filename):
     except Exception as e:
         logging.error(f"Ошибка загрузки {filename}: {e}")
         return {}
+
+# ==========================================
+# 🛠 ТЕХНИЧЕСКАЯ ФУНКЦИЯ (ПОЛУЧЕНИЕ ID ВИДЕО)
+# ==========================================
+@dp.message(F.video)
+async def get_video_id(message: types.Message):
+    # Просто отправь боту видео, и он скажет его ID для вставки в JSON
+    await message.answer(f"📹 **ID твоего видео:**\n\n`{message.video.file_id}`", parse_mode="Markdown")
 
 # ==========================================
 # 🏠 ГЛАВНОЕ МЕНЮ
@@ -299,7 +307,7 @@ async def random_challenge(callback: types.CallbackQuery):
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 # ==========================================
-# 👾 РАЗДЕЛ: БОССЫ
+# 👾 РАЗДЕЛ: БОССЫ (С ПОДДЕРЖКОЙ ВИДЕО)
 # ==========================================
 @dp.callback_query(F.data == "m_bosses")
 async def bosses_main(callback: types.CallbackQuery):
@@ -323,21 +331,53 @@ async def bosses_list(callback: types.CallbackQuery):
 async def boss_selected(callback: types.CallbackQuery):
     _, st, k = callback.data.split(":")
     boss = get_data('bosses')[st][k]
+    
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🛡️ Экипировка", callback_data=f"b_g:{st}:{k}"),
                 types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"b_f:{st}:{k}:drops"))
     builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{st}:{k}:tactics"),
-                types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"b_f:{st}:{k}:arena"))
+                types.InlineKeyboardButton(text="🏟️ Арена (Видео)", callback_data=f"b_f:{st}:{k}:arena"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_l:{st}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup())
+    
+    # Пытаемся редактировать, если была картинка/видео - удаляем и шлем заново
+    try:
+        await callback.message.edit_text(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    except:
+        await callback.message.delete()
+        await callback.message.answer(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("b_f:"))
 async def boss_field_info(callback: types.CallbackQuery):
     _, st, k, fld = callback.data.split(":")
-    txt = get_data('bosses')[st][k].get(fld, "Данные обновляются...")
-    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}"))
-    await callback.message.edit_text(f"📝 **Информация:**\n\n{txt}", reply_markup=builder.as_markup())
+    data = get_data('bosses')[st][k]
+    
+    txt = data.get(fld, "Данные обновляются...")
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к боссу", callback_data=f"b_s:{st}:{k}"))
+    
+    # ЕСЛИ ЭТО АРЕНА И ЕСТЬ ВИДЕО
+    if fld == "arena":
+        await callback.message.delete() # Удаляем старое меню
+        
+        if "arena_video" in data and data["arena_video"]:
+            try:
+                await callback.message.answer_video(
+                    video=data["arena_video"],
+                    caption=f"🏟️ **Видео-гайд по арене:**\n\n{txt}",
+                    reply_markup=builder.as_markup(),
+                    parse_mode="Markdown"
+                )
+                return
+            except Exception as e:
+                logging.error(f"Ошибка видео: {e}")
+                
+        # Если видео нет или ошибка - просто текст
+        await callback.message.answer(f"🏟️ **Схема Арены:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    else:
+        # Для остальных разделов (Дроп, Тактика)
+        await callback.message.edit_text(f"📝 **Информация:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("b_g:"))
 async def boss_gear_menu(callback: types.CallbackQuery):
