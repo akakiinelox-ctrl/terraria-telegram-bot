@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
-ADMIN_ID = 123456789 # <--- ЗАМЕНИ НА СВОЙ ID (чтобы смотреть /stats)
+ADMIN_ID = 599835907 # <--- ЗАМЕНИ НА СВОЙ ID (чтобы смотреть /stats)
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
