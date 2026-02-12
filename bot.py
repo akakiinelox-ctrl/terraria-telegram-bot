@@ -3,7 +3,8 @@ import json
 import logging
 import asyncio
 import random
-import aiohttp # <--- Новый импорт
+import aiohttp
+import html  # <--- ВАЖНО: Добавил библиотеку для безопасного текста
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandObject
@@ -14,7 +15,7 @@ from aiogram.fsm.context import FSMContext
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
-ADMIN_ID = 599835907  
+ADMIN_ID = 599835907  # Твой ID
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -27,7 +28,7 @@ class CalcState(StatesGroup):
 class AlchemyStates(StatesGroup):
     choosing_ingredients = State()
 
-class SearchState(StatesGroup): # <--- Состояние для поиска
+class SearchState(StatesGroup):
     waiting_for_query = State()
 
 # --- ДАННЫЕ ДЛЯ АЛХИМИИ ---
@@ -42,18 +43,56 @@ RECIPES = {
 
 # --- ДАННЫЕ ЧЕК-ЛИСТА ---
 CHECKLIST_DATA = {
-    "start": { "name": "🌱 Начало (Pre-Boss)", "items": [("🏠 Деревня", "Построено 5+ домов."), ("❤️ Жизнь", "Минимум 200 HP."), ("💎 Броня", "Золото/Платина."), ("🔗 Мобильность", "Крюк и сапоги."), ("⛏️ Кирка", "Золотая кирка.")] },
-    "pre_hm": { "name": "🌋 Финал Pre-HM", "items": [("⚔️ Грань Ночи", "Топовый меч."), ("❤️ 400 HP", "Максимум сердец."), ("🌋 Арена", "Дорожка в аду."), ("🌳 Карантин", "Туннели от порчи."), ("🎒 Аксессуары", "Перекованы на защиту.")] },
-    "hardmode_start": { "name": "⚙️ Ранний Хардмод", "items": [("⚒️ Кузня", "Сломаны алтари."), ("🧚 Крылья", "Найдены крылья."), ("🍏 500 HP", "Фрукты жизни."), ("🛡️ Броня", "Титан/Адамантит."), ("🔑 Ферма", "Ключи биомов.")] },
-    "endgame": { "name": "🌙 Финал (Мунлорд)", "items": [("🛸 НЛО", "Маунт с тарелки."), ("🔫 Оружие", "Пушки башен."), ("🩺 Арена", "Медсестра и мед."), ("🏆 Броня", "Люминит.")] }
+    "start": {
+        "name": "🌱 Начало (Pre-Boss)",
+        "items": [
+            ("🏠 Деревня", "Построено 5+ домов и заселен Гид и Торговец."),
+            ("❤️ Жизнь", "Найдено минимум 5 Кристаллов жизни."),
+            ("💎 Броня", "Сет из драгоценных камней или Золота/Платины."),
+            ("🔗 Мобильность", "Есть крюк-кошка и любые сапоги на бег."),
+            ("⛏️ Инструменты", "Кирка способна копать Метеорит/Демонит.")
+        ]
+    },
+    "pre_hm": {
+        "name": "🌋 Финал Pre-HM",
+        "items": [
+            ("⚔️ Грань Ночи", "Или топовое оружие твоего класса."),
+            ("❤️ 400 HP", "Здоровье на максимуме для этого этапа."),
+            ("🌋 Адская трасса", "Дорожка в аду длиной минимум в 1500 блоков."),
+            ("🌳 Карантин", "Туннели вокруг порчи/кримзона и дома."),
+            ("🎒 Аксессуары", "Аксессуары перекованы на +4 защиты или урона.")
+        ]
+    },
+    "hardmode_start": {
+        "name": "⚙️ Ранний Хардмод",
+        "items": [
+            ("⚒️ Кузня", "Разрушено 3+ алтаря, есть мифриловая наковальня."),
+            ("🧚 Крылья", "Выбиты первые крылья или куплены у Шамана."),
+            ("🍏 500 HP", "Найдены фрукты жизни в джунглях."),
+            ("🛡️ Титан", "Скрафчена броня из Титана или Адамантита."),
+            ("🔑 Ферма", "Выбита или скрафчена Ключ-форма/Световой ключ.")
+        ]
+    },
+    "endgame": {
+        "name": "🌙 Финал (Мунлорд)",
+        "items": [
+            ("🛸 Транспорт", "Получен бесконечный полет (НЛО или Метла)."),
+            ("🔫 Лунные башни", "Создано оружие из небесных фрагментов."),
+            ("🩺 Реген-станция", "Арена с медом, лампами и статуями на HP."),
+            ("🏆 Эндгейм сет", "Броня Жука, Спектральная или Тики/Шroomite.")
+        ]
+    }
 }
 
 # --- ЗАГРУЗКА ДАННЫХ ---
 def get_data(filename):
     try:
         with open(f'data/{filename}.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
+            content = f.read().strip()
+            if not content:  # Если файл пустой
+                return {}
+            return json.loads(content)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
         logging.error(f"Ошибка загрузки {filename}: {e}")
         return {}
 
@@ -65,8 +104,11 @@ def save_user(user_id, username, source="organic"):
     
     if user_id not in users:
         users[user_id] = {
-            "username": username, "join_date": today, "source": source,
-            "last_active": today, "activity_count": 1
+            "username": username,
+            "join_date": today,
+            "source": source,
+            "last_active": today,
+            "activity_count": 1
         }
     else:
         users[user_id]["last_active"] = today
@@ -84,33 +126,36 @@ def save_user(user_id, username, source="organic"):
 # ==========================================
 async def get_wiki_guide(query):
     url = "https://terraria.wiki.gg/ru/api.php"
-    # Поиск страницы
     search_params = {
         "action": "query", "list": "search", "srsearch": query,
         "format": "json", "srlimit": 1
     }
     
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=search_params) as resp:
-            s_data = await resp.json()
-            if not s_data['query']['search']: return None
-            
-            page_title = s_data['query']['search'][0]['title']
-            
-            # Получение текста
-            txt_params = {
-                "action": "query", "prop": "extracts", "exintro": True,
-                "explaintext": True, "titles": page_title, "format": "json"
-            }
-            async with session.get(url, params=txt_params) as txt_resp:
-                t_data = await txt_resp.json()
-                pages = t_data['query']['pages']
-                page_id = list(pages.keys())[0]
-                return {
-                    "title": page_title,
-                    "text": pages[page_id].get('extract', 'Описание отсутствует.'),
-                    "url": f"https://terraria.wiki.gg/ru/wiki/{page_title.replace(' ', '_')}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=search_params) as resp:
+                if resp.status != 200: return None
+                s_data = await resp.json()
+                if not s_data.get('query', {}).get('search'): return None
+                
+                page_title = s_data['query']['search'][0]['title']
+                
+                txt_params = {
+                    "action": "query", "prop": "extracts", "exintro": True,
+                    "explaintext": True, "titles": page_title, "format": "json"
                 }
+                async with session.get(url, params=txt_params) as txt_resp:
+                    t_data = await txt_resp.json()
+                    pages = t_data['query']['pages']
+                    page_id = list(pages.keys())[0]
+                    return {
+                        "title": page_title,
+                        "text": pages[page_id].get('extract', 'Описание отсутствует.'),
+                        "url": f"https://terraria.wiki.gg/ru/wiki/{page_title.replace(' ', '_')}"
+                    }
+    except Exception as e:
+        logging.error(f"Ошибка Wiki API: {e}")
+        return None
 
 # ==========================================
 # 🛡️ АДМИН-ПАНЕЛЬ
@@ -118,42 +163,61 @@ async def get_wiki_guide(query):
 @dp.message(Command("stats"))
 async def admin_stats(message: types.Message):
     if message.from_user.id != ADMIN_ID: return 
+
     users = get_data('users')
-    total, active_today = len(users), 0
+    total = len(users)
     sources = {}
+    active_today = 0
     today_str = datetime.now().strftime("%Y-%m-%d")
+
     for u in users.values():
         src = u.get("source", "organic")
         sources[src] = sources.get(src, 0) + 1
-        if u.get("last_active") == today_str: active_today += 1
-    text = f"📊 Всего: {total}\n🔥 Сегодня: {active_today}\n📢 Источники:\n"
-    for src, count in sources.items(): text += f"• {src}: {count}\n"
+        if u.get("last_active") == today_str:
+            active_today += 1
+
+    text = (f"📊 **Статистика Бота:**\n\n"
+            f"👥 Всего людей: **{total}**\n"
+            f"🔥 Активны сегодня: **{active_today}**\n\n"
+            f"📢 **Источники:**\n")
+    for src, count in sources.items():
+        text += f"• {src}: {count}\n"
+
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("link"))
 async def generate_ref_link(message: types.Message, command: CommandObject):
     if message.from_user.id != ADMIN_ID: return
-    if not command.args: return await message.answer("❌ `/link tiktok`")
+
+    if not command.args:
+        await message.answer("❌ Пиши так: `/link tiktok`", parse_mode="Markdown")
+        return
+
     bot_user = await bot.get_me()
-    link = f"https://t.me/{bot_user.username}?start={command.args.strip()}"
-    await message.answer(f"✅ Ссылка:\n`{link}`", parse_mode="Markdown")
+    ref_name = command.args.strip()
+    link = f"https://t.me/{bot_user.username}?start={ref_name}"
+    
+    await message.answer(f"✅ **Ссылка для {ref_name}:**\n\n`{link}`", parse_mode="Markdown")
 
 @dp.message(F.photo)
 async def get_photo_id(message: types.Message):
-    if message.from_user.id == ADMIN_ID:
-        await message.answer(f"🖼 ID: `{message.photo[-1].file_id}`", parse_mode="Markdown")
+    if message.from_user.id != ADMIN_ID: return
+    await message.answer(f"🖼 **ID фото:**\n\n`{message.photo[-1].file_id}`", parse_mode="Markdown")
+
+@dp.message(F.video)
+async def get_video_id(message: types.Message):
+    if message.from_user.id != ADMIN_ID: return
+    await message.answer(f"📹 **ID видео:**\n\n`{message.video.file_id}`", parse_mode="Markdown")
 
 # ==========================================
 # 🏠 ГЛАВНОЕ МЕНЮ
 # ==========================================
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message, command: CommandObject = None, state: FSMContext = None):
+async def cmd_start(message: types.Message, command: CommandObject, state: FSMContext = None):
     if state: await state.clear()
     
-    # Трекинг
-    args = command.args if command and hasattr(command, 'args') else None
-    ref = args if args else "organic"
-    save_user(message.from_user.id, message.from_user.username, ref)
+    ref_source = command.args if command.args else "organic"
+    save_user(message.from_user.id, message.from_user.username, ref_source)
 
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🔍 Поиск предмета / Гайд", callback_data="m_search"))
@@ -167,7 +231,7 @@ async def cmd_start(message: types.Message, command: CommandObject = None, state
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
-    text = "🛠 **Terraria Tactical Assistant**\n\nПривет! Выбери раздел или воспользуйся поиском гайдов:"
+    text = "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я помогу тебе подготовиться к любой угрозе. Выбери раздел:"
     
     if isinstance(message, types.CallbackQuery):
         await message.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
@@ -177,20 +241,25 @@ async def cmd_start(message: types.Message, command: CommandObject = None, state
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     save_user(callback.from_user.id, callback.from_user.username)
-    await cmd_start(callback.message, None, state)
+    await cmd_start(callback.message, CommandObject(prefix="/", command="start", args=None), state)
 
 # ==========================================
-# 🔍 ОБРАБОТКА ПОИСКА
+# 🔍 ОБРАБОТКА ПОИСКА (ИСПРАВЛЕННАЯ)
 # ==========================================
 @dp.callback_query(F.data == "m_search")
 async def search_entry(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SearchState.waiting_for_query)
-    await callback.message.edit_text("🔎 **Введите название предмета или моба:**\n\nЯ найду информацию в базе знаний Terraria.", 
-                                     reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")).as_markup())
+    await callback.message.edit_text(
+        "🔎 **Введите название предмета или моба:**\n\nЯ найду информацию в базе знаний Terraria.", 
+        reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")).as_markup(),
+        parse_mode="Markdown"
+    )
 
 @dp.message(SearchState.waiting_for_query)
 async def search_result(message: types.Message, state: FSMContext):
+    # Показываем статус "печатает..."
     await bot.send_chat_action(message.chat.id, "typing")
+    
     res = await get_wiki_guide(message.text)
     await state.clear()
     
@@ -199,15 +268,27 @@ async def search_result(message: types.Message, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
     
     if res:
-        # Ограничиваем длину текста для Telegram (макс 4096, но лучше меньше)
-        short_text = (res['text'][:1000] + '...') if len(res['text']) > 1000 else res['text']
-        await message.answer(f"📖 **Гайд: {res['title']}**\n\n{short_text}\n\n🔗 [Читать подробнее на Wiki]({res['url']})", 
-                             reply_markup=builder.as_markup(), parse_mode="Markdown", disable_web_page_preview=True)
+        # Экранируем текст для безопасного HTML
+        safe_title = html.escape(res['title'])
+        safe_text = html.escape(res['text'])
+        
+        # Обрезаем слишком длинный текст
+        if len(safe_text) > 1000:
+            safe_text = safe_text[:1000] + "..."
+
+        text_to_send = (
+            f"📖 <b>Гайд: {safe_title}</b>\n\n"
+            f"{safe_text}\n\n"
+            f"🔗 <a href='{res['url']}'>Читать подробнее на Wiki</a>"
+        )
+        
+        # Используем HTML, чтобы не ломалось из-за символов * или _
+        await message.answer(text_to_send, reply_markup=builder.as_markup(), parse_mode="HTML", disable_web_page_preview=True)
     else:
         await message.answer("❌ Ничего не найдено. Попробуйте другое название.", reply_markup=builder.as_markup())
 
 # ==========================================
-# (ВЕСЬ ОСТАЛЬНОЙ КОД БЕЗ ИЗМЕНЕНИЙ)
+# ОСТАЛЬНОЙ КОД БЕЗ ИЗМЕНЕНИЙ
 # ==========================================
 
 @dp.callback_query(F.data == "m_checklist")
@@ -217,7 +298,7 @@ async def checklist_categories(callback: types.CallbackQuery, state: FSMContext)
     for key, val in CHECKLIST_DATA.items():
         builder.row(types.InlineKeyboardButton(text=f"📍 {val['name']}", callback_data=f"chk_cat:{key}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text("🗺 **Карта прогресса Terraria**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🗺 **Карта прогресса Terraria**\n\nВыбери текущий этап приключения.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("chk_cat:"))
 async def checklist_start(callback: types.CallbackQuery, state: FSMContext):
@@ -228,20 +309,22 @@ async def checklist_start(callback: types.CallbackQuery, state: FSMContext):
 async def show_checklist(message: types.Message, cat, completed_indices):
     builder = InlineKeyboardBuilder()
     items = CHECKLIST_DATA[cat]['items']
-    total, done = len(items), len(completed_indices)
+    total = len(items)
+    done = len(completed_indices)
     perc = int((done / total) * 100)
     bar = "🟩" * done + "⬜" * (total - done)
     for i, (name, _) in enumerate(items):
         status = "✅" if i in completed_indices else "⭕"
         builder.row(types.InlineKeyboardButton(text=f"{status} {name}", callback_data=f"chk_tog:{i}"))
     builder.row(types.InlineKeyboardButton(text="📊 Анализ", callback_data="chk_res"), types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_checklist"))
-    await message.edit_text(f"📋 **Этап: {CHECKLIST_DATA[cat]['name']}**\n┃ {bar} {perc}%\n┗━━━━━━━━━━━━━━", reply_markup=builder.as_markup())
+    await message.edit_text(f"📋 **Этап: {CHECKLIST_DATA[cat]['name']}**\n┃ {bar} {perc}%\n┗━━━━━━━━━━━━━━\nНажимай на задачи, чтобы отметить их.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("chk_tog:"))
 async def toggle_item(callback: types.CallbackQuery, state: FSMContext):
     index = int(callback.data.split(":")[1])
     data = await state.get_data()
-    cat, completed = data.get('current_cat'), data.get('completed', [])
+    cat = data.get('current_cat')
+    completed = data.get('completed', [])
     if index in completed: completed.remove(index)
     else: 
         completed.append(index)
@@ -252,19 +335,20 @@ async def toggle_item(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "chk_res")
 async def checklist_result(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    cat, count = data.get('current_cat'), len(data.get('completed', []))
+    cat = data.get('current_cat')
+    count = len(data.get('completed', []))
     total = len(CHECKLIST_DATA[cat]['items'])
-    if count == total: res = "👑 **МАСТЕР ЭТАПА**"
-    elif count >= total // 2: res = f"⚔️ **ОПЫТНЫЙ ВОИН ({count}/{total})**"
-    else: res = f"💀 **СМЕРТНИК ({count}/{total})**"
-    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"chk_cat:{cat}"), types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
+    if count == total: res = "👑 **МАСТЕР ЭТАПА**\n\nТы полностью закрыл этот этап!"
+    elif count >= total // 2: res = f"⚔️ **ОПЫТНЫЙ ВОИН ({count}/{total})**\n\nШансы высоки."
+    else: res = f"💀 **СМЕРТНИК ({count}/{total})**\n\nТвоя подготовка ужасна."
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Продолжить", callback_data=f"chk_cat:{cat}"), types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
     await callback.message.edit_text(res, reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "m_alchemy")
 async def alchemy_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔮 Варить", callback_data="alc_craft"), types.InlineKeyboardButton(text="📜 Книга", callback_data="alc_book"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text("✨ **Алхимия**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("✨ **Алхимическая лаборатория**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "alc_craft")
 async def start_crafting(callback: types.CallbackQuery, state: FSMContext):
@@ -274,7 +358,7 @@ async def start_crafting(callback: types.CallbackQuery, state: FSMContext):
     for ing in ["Дневноцвет", "Луноцвет", "Смертоцвет", "Гриб", "Руда", "Линза", "Падшая звезда", "Рыба-призрак"]:
         builder.add(types.InlineKeyboardButton(text=ing, callback_data=f"ing:{ing}"))
     builder.adjust(2).row(types.InlineKeyboardButton(text="🔥 Варить!", callback_data="alc_mix"), types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text("🌿 **Выбери 2 ингредиента:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🌿 **Бросай ингредиенты (выбери 2):**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("ing:"))
 async def add_ingredient(callback: types.CallbackQuery, state: FSMContext):
@@ -294,7 +378,7 @@ async def final_mix(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     mix = data.get('mix', [])
     if len(mix) < 2: return await callback.answer("Нужно 2 ингредиента!")
-    result = RECIPES.get(tuple(sorted(mix)), "💥 Ошибка...")
+    result = RECIPES.get(tuple(sorted(mix)), "💥 Ба-бах! Получилась бесполезная жижа...")
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔄 Еще раз", callback_data="alc_craft"), types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
     await callback.message.edit_text(f"🧪 **Результат:**\n\n{result}", reply_markup=builder.as_markup())
     await state.clear()
@@ -305,7 +389,7 @@ async def alchemy_book(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for key, s in data.items(): builder.row(types.InlineKeyboardButton(text=s['name'], callback_data=f"alc_s:{key}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_alchemy"))
-    await callback.message.edit_text("📜 **Рецепты:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📜 **Книга рецептов:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("alc_s:"))
 async def alchemy_set_details(callback: types.CallbackQuery):
@@ -355,12 +439,14 @@ async def boss_selected(callback: types.CallbackQuery):
 async def boss_field_info(callback: types.CallbackQuery):
     _, st, k, fld = callback.data.split(":")
     data = get_data('bosses')[st][k]
-    txt = data.get(fld, "...")
+    txt = data.get(fld, "Данные обновляются...")
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}"))
+    
     if fld == "arena" and "arena_img" in data and data["arena_img"]:
         await callback.message.delete()
-        await callback.message.answer_photo(photo=data["arena_img"], caption=f"🏟️ **Арена:**\n\n{txt}", reply_markup=builder.as_markup())
-    else: await callback.message.edit_text(f"📝 {txt}", reply_markup=builder.as_markup())
+        try: await callback.message.answer_photo(photo=data["arena_img"], caption=f"🏟️ **Схема Арены:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
+        except: await callback.message.answer(f"🏟️ **Схема Арены:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    else: await callback.message.edit_text(f"📝 **Информация:**\n\n{txt}", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("b_g:"))
 async def boss_gear_menu(callback: types.CallbackQuery):
@@ -369,7 +455,7 @@ async def boss_gear_menu(callback: types.CallbackQuery):
     for cid, name in {"warrior": "⚔️ Воин", "ranger": "🎯 Стрелок", "mage": "🔮 Маг", "summoner": "🐍 Призыв"}.items():
         builder.row(types.InlineKeyboardButton(text=name, callback_data=f"b_gc:{st}:{k}:{cid}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}"))
-    await callback.message.edit_text("🛡️ **Класс:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🛡️ **Выберите класс:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("b_gc:"))
 async def boss_gear_final(callback: types.CallbackQuery):
@@ -378,7 +464,7 @@ async def boss_gear_final(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for i, itm in enumerate(items): builder.row(types.InlineKeyboardButton(text=itm['name'], callback_data=f"b_gi:{st}:{k}:{cid}:{i}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_g:{st}:{k}"))
-    await callback.message.edit_text("🎒 **Предметы:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🎒 **Лучшие предметы:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("b_gi:"))
 async def boss_gear_alert(callback: types.CallbackQuery):
