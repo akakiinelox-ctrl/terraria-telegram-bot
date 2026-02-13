@@ -3,10 +3,6 @@ import json
 import logging
 import asyncio
 import random
-import aiohttp
-import html
-# --- НОВЫЙ ИМПОРТ ДЛЯ GEMINI ---
-import google.generativeai as genai 
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandObject
@@ -16,19 +12,8 @@ from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
-TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТЕЛЕГРАМ_ТОКЕН_ЗДЕСЬ"
-ADMIN_ID = 599835907  
-
-# --- НАСТРОЙКИ GEMINI ---
-# Вставь сюда ключ, который получишь в Google AI Studio
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyDC5DhxG5FBr1WSmVnUJT59BEHtUYE3LLQ"
-
-# Настраиваем модель
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash", # Быстрая и легкая модель
-    system_instruction="Ты — Гид из игры Terraria. Твоя задача — давать четкие, короткие и полезные советы игрокам на русском языке. Используй игровую терминологию. Не используй Markdown форматирование (жирный шрифт, курсив), пиши обычным текстом."
-)
+TOKEN = os.getenv("BOT_TOKEN") or "ТВОЙ_ТОКЕН_ЗДЕСЬ"
+ADMIN_ID = 599835907  # Твой ID для админ-доступа
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -40,12 +25,6 @@ class CalcState(StatesGroup):
 
 class AlchemyStates(StatesGroup):
     choosing_ingredients = State()
-
-class AIState(StatesGroup): 
-    waiting_for_question = State()
-
-class SearchState(StatesGroup):
-    waiting_for_query = State()
 
 # --- ДАННЫЕ ДЛЯ АЛХИМИИ ---
 RECIPES = {
@@ -104,8 +83,7 @@ CHECKLIST_DATA = {
 def get_data(filename):
     try:
         with open(f'data/{filename}.json', 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-            return json.loads(content) if content else {}
+            return json.load(f)
     except Exception as e:
         logging.error(f"Ошибка загрузки {filename}: {e}")
         return {}
@@ -134,40 +112,6 @@ def save_user(user_id, username, source="organic"):
             json.dump(users, f, indent=2, ensure_ascii=False)
     except Exception as e:
         logging.error(f"Ошибка сохранения юзера: {e}")
-
-# ==========================================
-# 🧠 ЛОГИКА ИИ (GEMINI)
-# ==========================================
-async def get_ai_guide_answer(user_text):
-    if not GEMINI_API_KEY or "ТВОЙ_КЛЮЧ" in GEMINI_API_KEY:
-        return "Мой создатель забыл дать мне ключ от разума (API KEY). Скажи ему об этом!"
-
-    try:
-        # Отправляем запрос в Google Gemini (асинхронно)
-        response = await model.generate_content_async(user_text)
-        
-        # Получаем текст ответа
-        text = response.text
-        
-        # Очищаем и форматируем для HTML
-        return html.escape(text.strip())
-        
-    except Exception as e:
-        logging.error(f"Gemini Error: {e}")
-        return "Что-то помешало мне сосредоточиться... Спроси позже или переформулируй вопрос."
-
-# --- ПОИСК WIKI (Оставлен как запасной вариант или для кнопки) ---
-async def get_wiki_guide(query):
-    url = "https://terraria.wiki.gg/ru/api.php"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params={"action": "query", "list": "search", "srsearch": query, "format": "json", "srlimit": 1}) as resp:
-            s_data = await resp.json()
-            if not s_data.get('query', {}).get('search'): return None
-            title = s_data['query']['search'][0]['title']
-            async with session.get(url, params={"action": "query", "prop": "extracts", "exintro": True, "explaintext": True, "titles": title, "format": "json"}) as txt_resp:
-                t_data = await txt_resp.json()
-                page = next(iter(t_data['query']['pages'].values()))
-                return {"title": title, "text": page.get('extract', ' Описание отсутствует.'), "url": f"https://terraria.wiki.gg/ru/wiki/{title.replace(' ', '_')}"}
 
 # ==========================================
 # 🛡️ АДМИН-ПАНЕЛЬ (СТАТИСТИКА)
@@ -240,12 +184,6 @@ async def cmd_start(message: types.Message, command: CommandObject, state: FSMCo
     # ---------------
 
     builder = InlineKeyboardBuilder()
-    
-    # КНОПКА ГИДА (GEMINI)
-    builder.row(types.InlineKeyboardButton(text="🧔 Спросить Гида (AI)", callback_data="m_ai"))
-    # Кнопка обычного поиска
-    builder.row(types.InlineKeyboardButton(text="🔍 Поиск (Wiki)", callback_data="m_search"))
-    
     builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
                 types.InlineKeyboardButton(text="⚔️ События", callback_data="m_events"))
     builder.row(types.InlineKeyboardButton(text="🛡️ Классы", callback_data="m_classes"),
@@ -267,56 +205,6 @@ async def cmd_start(message: types.Message, command: CommandObject, state: FSMCo
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     save_user(callback.from_user.id, callback.from_user.username)
     await cmd_start(callback.message, CommandObject(prefix="/", command="start", args=None), state)
-
-# ==========================================
-# 🗣 ДИАЛОГ С ГИДОМ (GEMINI AI)
-# ==========================================
-@dp.callback_query(F.data == "m_ai")
-async def ai_entry(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(AIState.waiting_for_question)
-    await callback.message.edit_text(
-        "🧔 <b>Гид слушает тебя.</b>\n\nСпроси меня о чем угодно: как убить босса, где найти руду или как скрафтить меч. Я постараюсь дать точный совет.\n\n"
-        "✍️ <i>Напиши свой вопрос в чат:</i>",
-        reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")).as_markup(),
-        parse_mode="HTML"
-    )
-
-@dp.message(AIState.waiting_for_question)
-async def ai_response(message: types.Message, state: FSMContext):
-    # Показываем, что бот печатает
-    await bot.send_chat_action(message.chat.id, "typing")
-    
-    # Получаем ответ от GEMINI
-    answer = await get_ai_guide_answer(message.text)
-    
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="❓ Задать еще вопрос", callback_data="m_ai"))
-    builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
-    
-    # Ответ уже экранирован в функции, можно слать в HTML
-    await message.answer(f"🧔 <b>Гид:</b>\n\n{answer}", reply_markup=builder.as_markup(), parse_mode="HTML")
-    await state.clear()
-
-# ==========================================
-# 🔍 ПОИСК (Wiki) - ОСТАВИЛ КАК ЗАПАСНОЙ ВАРИАНТ
-# ==========================================
-@dp.callback_query(F.data == "m_search")
-async def search_entry(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(SearchState.waiting_for_query)
-    await callback.message.edit_text("🔎 <b>Введите название предмета:</b>", 
-                                     reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")).as_markup(), parse_mode="HTML")
-
-@dp.message(SearchState.waiting_for_query)
-async def search_result(message: types.Message, state: FSMContext):
-    await bot.send_chat_action(message.chat.id, "typing")
-    res = await get_wiki_guide(message.text)
-    await state.clear()
-    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔍 Искать снова", callback_data="m_search")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-    if res:
-        safe_text = html.escape(res['text'])[:1000] + "..." if len(res['text']) > 1000 else html.escape(res['text'])
-        await message.answer(f"📖 <b>Гайд: {html.escape(res['title'])}</b>\n\n{safe_text}\n\n🔗 <a href='{res['url']}'>Читать на Wiki</a>", 
-                             reply_markup=builder.as_markup(), parse_mode="HTML", disable_web_page_preview=True)
-    else: await message.answer("❌ Ничего не найдено.", reply_markup=builder.as_markup())
 
 # ==========================================
 # 📋 РАЗДЕЛ: МАСШТАБНЫЙ ЧЕК-ЛИСТ
@@ -343,25 +231,16 @@ async def checklist_start(callback: types.CallbackQuery, state: FSMContext):
 async def show_checklist(message: types.Message, cat, completed_indices):
     builder = InlineKeyboardBuilder()
     items = CHECKLIST_DATA[cat]['items']
-    
     total = len(items)
     done = len(completed_indices)
     perc = int((done / total) * 100)
     bar = "🟩" * done + "⬜" * (total - done)
-    
     for i, (name, _) in enumerate(items):
         status = "✅" if i in completed_indices else "⭕"
         builder.row(types.InlineKeyboardButton(text=f"{status} {name}", callback_data=f"chk_tog:{i}"))
-    
     builder.row(types.InlineKeyboardButton(text="📊 Анализ готовности", callback_data="chk_res"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_checklist"))
-    
-    text = (
-        f"📋 **Этап: {CHECKLIST_DATA[cat]['name']}**\n"
-        f"┃ {bar} {perc}%\n"
-        f"┗━━━━━━━━━━━━━━\n"
-        f"Нажимай на задачи, чтобы отметить их как выполненные."
-    )
+    text = f"📋 **Этап: {CHECKLIST_DATA[cat]['name']}**\n┃ {bar} {perc}%\n┗━━━━━━━━━━━━━━\nНажимай на задачи, чтобы отметить их как выполненные."
     await message.edit_text(text, reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("chk_tog:"))
@@ -370,13 +249,10 @@ async def toggle_item(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     cat = data.get('current_cat')
     completed = data.get('completed', [])
-    
-    if index in completed:
-        completed.remove(index)
+    if index in completed: completed.remove(index)
     else:
         completed.append(index)
         await callback.answer(f"💡 {CHECKLIST_DATA[cat]['items'][index][1]}", show_alert=True)
-    
     await state.update_data(completed=completed)
     await show_checklist(callback.message, cat, completed)
 
@@ -386,14 +262,9 @@ async def checklist_result(callback: types.CallbackQuery, state: FSMContext):
     cat = data.get('current_cat')
     count = len(data.get('completed', []))
     total = len(CHECKLIST_DATA[cat]['items'])
-    
-    if count == total:
-        res = "👑 **МАСТЕР ЭТАПА**\n\nТы полностью закрыл этот этап! Твоя подготовка идеальна."
-    elif count >= total // 2:
-        res = f"⚔️ **ОПЫТНЫЙ ВОИН ({count}/{total})**\n\nШансы высоки, но можно подготовиться лучше."
-    else:
-        res = f"💀 **СМЕРТНИК ({count}/{total})**\n\nТвоя подготовка ужасна. Тебя ждет быстрая смерть!"
-    
+    if count == total: res = "👑 **МАСТЕР ЭТАПА**\n\nТы полностью закрыл этот этап! Твоя подготовка идеальна."
+    elif count >= total // 2: res = f"⚔️ **ОПЫТНЫЙ ВОИН ({count}/{total})**\n\nШансы высоки, но можно подготовиться лучше."
+    else: res = f"💀 **СМЕРТНИК ({count}/{total})**\n\nТвоя подготовка ужасна. Тебя ждет быстрая смерть!"
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="⬅️ Продолжить", callback_data=f"chk_cat:{cat}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
@@ -408,25 +279,18 @@ async def alchemy_main(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="🔮 Варить зелье", callback_data="alc_craft"))
     builder.row(types.InlineKeyboardButton(text="📜 Книга рецептов", callback_data="alc_book"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    await callback.message.edit_text(
-        "✨ **Алхимическая лаборатория**\n\nЗдесь ты можешь испытать удачу в варке или изучить готовые наборы для боя.",
-        reply_markup=builder.as_markup()
-    )
+    await callback.message.edit_text("✨ **Алхимическая лаборатория**\n\nЗдесь ты можешь испытать удачу в варке или изучить готовые наборы для боя.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "alc_craft")
 async def start_crafting(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(AlchemyStates.choosing_ingredients)
     await state.update_data(mix=[])
-    
     builder = InlineKeyboardBuilder()
     ingredients = ["Дневноцвет", "Луноцвет", "Смертоцвет", "Гриб", "Руда", "Линза", "Падшая звезда", "Рыба-призрак"]
-    for ing in ingredients:
-        builder.add(types.InlineKeyboardButton(text=ing, callback_data=f"ing:{ing}"))
-    
+    for ing in ingredients: builder.add(types.InlineKeyboardButton(text=ing, callback_data=f"ing:{ing}"))
     builder.adjust(2)
     builder.row(types.InlineKeyboardButton(text="🔥 Начать варку!", callback_data="alc_mix"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    
     await callback.message.edit_text("🌿 **Бросай ингредиенты в котёл (выбери 2):**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("ing:"))
@@ -434,33 +298,26 @@ async def add_ingredient(callback: types.CallbackQuery, state: FSMContext):
     ing = callback.data.split(":")[1]
     data = await state.get_data()
     mix = data.get('mix', [])
-    
     if len(mix) < 2:
         if ing not in mix:
             mix.append(ing)
             await state.update_data(mix=mix)
             await callback.answer(f"Добавлено: {ing}")
-        else:
-            await callback.answer("Этот ингредиент уже в котле!", show_alert=True)
-    else:
-        await callback.answer("Котёл полон!", show_alert=True)
+        else: await callback.answer("Этот ингредиент уже в котле!", show_alert=True)
+    else: await callback.answer("Котёл полон!", show_alert=True)
 
 @dp.callback_query(F.data == "alc_mix")
 async def final_mix(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     mix = data.get('mix', [])
-    
     if len(mix) < 2:
         await callback.answer("Нужно минимум 2 ингредиента!", show_alert=True)
         return
-
     mix_tuple = tuple(sorted(mix))
     result = RECIPES.get(mix_tuple, "💥 Ба-бах! Получилась бесполезная жижа...")
-    
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🔄 Сварить еще", callback_data="alc_craft"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
-    
     await callback.message.edit_text(f"🧪 **Результат варки:**\n\n{result}", reply_markup=builder.as_markup())
     await state.clear()
 
@@ -468,8 +325,7 @@ async def final_mix(callback: types.CallbackQuery, state: FSMContext):
 async def alchemy_book(callback: types.CallbackQuery):
     data = get_data('alchemy').get('sets', {})
     builder = InlineKeyboardBuilder()
-    for key, s in data.items():
-        builder.row(types.InlineKeyboardButton(text=s['name'], callback_data=f"alc_s:{key}"))
+    for key, s in data.items(): builder.row(types.InlineKeyboardButton(text=s['name'], callback_data=f"alc_s:{key}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_alchemy"))
     await callback.message.edit_text("📜 **Книга проверенных рецептов:**", reply_markup=builder.as_markup())
 
@@ -478,8 +334,7 @@ async def alchemy_set_details(callback: types.CallbackQuery):
     set_key = callback.data.split(":")[1]
     alc_set = get_data('alchemy')['sets'][set_key]
     text = f"🧪 **Сет: {alc_set['name']}**\n━━━━━━━━━━━━━━\n\n"
-    for p in alc_set['potions']:
-        text += f"🔹 **{p['name']}**\n└ ✨ Эффект: {p['effect']}\n└ 🛠 Рецепт: {p['recipe']}\n\n"
+    for p in alc_set['potions']: text += f"🔹 **{p['name']}**\n└ ✨ Эффект: {p['effect']}\n└ 🛠 Рецепт: {p['recipe']}\n\n"
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="alc_book"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
@@ -772,8 +627,7 @@ async def ore_input_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     try:
         total = int(message.text) * int(data['current_ratio'])
-        await message.answer(f"⛏ Для **{message.text}** слитков нужно **{total}** руды.", 
-                             reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ К калькулятору", callback_data="m_calc")).as_markup())
+        await message.answer(f"⛏ Для **{message.text}** слитков нужно **{total}** руды.", reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ К калькулятору", callback_data="m_calc")).as_markup())
         await state.clear()
     except: await message.answer("❌ Введите целое число!")
 
