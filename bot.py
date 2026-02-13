@@ -21,7 +21,7 @@ ADMIN_ID = 599835907
 
 # --- НАСТРОЙКИ GEMINI ---
 # Вставь сюда ключ, который получишь в Google AI Studio
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyCjooGGshHbv-2n3i4Xuq3hB1BSLhoz200"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyDC5DhxG5FBr1WSmVnUJT59BEHtUYE3LLQ"
 
 # Настраиваем модель
 genai.configure(api_key=GEMINI_API_KEY)
