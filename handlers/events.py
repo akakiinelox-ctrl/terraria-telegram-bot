@@ -47,4 +47,3 @@ async def event_info(callback: types.CallbackQuery):
     
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"ev_l:{stage}"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
-
