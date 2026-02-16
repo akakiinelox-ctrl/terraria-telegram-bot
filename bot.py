@@ -2,7 +2,6 @@ import os
 import json
 import logging
 import asyncio
-import random
 import aiohttp
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
@@ -55,11 +54,11 @@ def save_user(user_id, username, source="organic"):
     except: pass
 
 # ==========================================
-# 🧠 МОЗГ: WIKI + ИИ (RAG)
+# 🧠 МОЗГ: WIKI (Raw Code) + ИИ
 # ==========================================
 
 async def get_wiki_content(query):
-    """Ищет статью и скачивает её полный текст"""
+    """Ищет статью и скачивает её ИСХОДНЫЙ КОД (Wikitext)"""
     api_url = "https://terraria.wiki.gg/ru/api.php"
     async with aiohttp.ClientSession() as session:
         # 1. Поиск точного заголовка
@@ -71,75 +70,90 @@ async def get_wiki_content(query):
             title = data[1][0]
             url = data[3][0]
 
-        # 2. Скачивание текста статьи
+        # 2. Скачивание исходного кода страницы (Revisions)
+        # Это позволяет получить данные таблиц и шаблонов, которые пропадают в обычном extract
         async with session.get(api_url, params={
-            "action": "query", "prop": "extracts", "titles": title,
-            "explaintext": "true", "exintro": "false", "format": "json"
+            "action": "query", 
+            "prop": "revisions", 
+            "rvprop": "content", # Запрашиваем контент
+            "titles": title,
+            "format": "json"
         }) as resp:
             data = await resp.json()
             pages = data.get("query", {}).get("pages", {})
             for pid in pages:
-                return {"title": title, "text": pages[pid].get("extract", ""), "url": url}
+                if pid == "-1": return None # Страница не существует
+                
+                # Получаем сырой текст (wikitext)
+                raw_text = pages[pid].get("revisions", [{}])[0].get("*", "")
+                return {"title": title, "text": raw_text, "url": url}
     return None
 
 async def generate_answer(query, wiki_data):
-    """Генерирует ответ через Groq на основе текста Wiki"""
-    # Обрезаем текст, если он слишком огромный (чтобы влез в память ИИ)
-    context_text = wiki_data['text'][:15000] 
+    """Генерирует ответ через Groq на основе Wikitext"""
+    # Обрезаем текст, чтобы не перегрузить токенами, но берем побольше
+    context_text = wiki_data['text'][:25000] 
     
     system_prompt = (
-        "Ты — Гид из Terraria. Твоя задача — ответить на вопрос пользователя, ИСПОЛЬЗУЯ ТОЛЬКО ПРЕДОСТАВЛЕННЫЙ ТЕКСТ ИЗ WIKI."
+        "Ты — Гид из Terraria. Твоя задача — ответить на вопрос, анализируя ИСХОДНЫЙ КОД (Wikitext) статьи."
+        "\n\nКАК ЧИТАТЬ ДАННЫЕ:"
+        "\n- Рецепты находятся в блоках {{Рецепт|...}} или {{Recipe}}."
+        "\n- Характеристики предмета находятся в {{ItemInfobox...}}."
+        "\n- Дроп находится в таблицах {{Drop...}}."
         "\n\nПРАВИЛА:"
-        "\n1. Не выдумывай факты, которых нет в тексте."
-        "\n2. Если спрашивают крафт — найди его в тексте и распиши списком."
-        "\n3. Если в тексте нет ответа, так и скажи."
-        "\n4. Отвечай на русском языке, используй Markdown и эмодзи."
-        "\n5. Будь краток и полезен."
+        "\n1. Игнорируй технический мусор, ищи суть."
+        "\n2. Если спрашивают КРАФТ ЗЕНИТА: Найди дерево рецептов. Там много мечей. Перечисли их все."
+        "\n3. Отвечай красиво, на русском языке, используй Markdown списки."
+        "\n4. Не придумывай ничего, чего нет в коде статьи."
     )
 
     try:
         chat = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Текст статьи из Wiki: {context_text}\n\nВОПРОС ПОЛЬЗОВАТЕЛЯ: {query}"}
+                {"role": "user", "content": f"Исходный код статьи Wiki: {context_text}\n\nВОПРОС ПОЛЬЗОВАТЕЛЯ: {query}"}
             ],
             model="llama-3.3-70b-versatile",
-            temperature=0.3, # Низкая температура = меньше фантазий
+            temperature=0.2, # Низкая температура для точности фактов
         )
         return chat.choices[0].message.content
     except Exception as e:
-        return f"Ошибка мозга: {e}"
+        return f"Ошибка обработки данных: {e}"
 
 # --- ОБРАБОТЧИКИ ПОИСКА ---
 
 @dp.callback_query(F.data == "m_search")
 async def search_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SearchState.wait_item_name)
-    await callback.message.answer("🔎 **Введите название предмета (как в игре):**\nНапример: _Зенит, Жезл раздора, Плантера_")
+    await callback.message.answer("🔎 **Введите название (предмет, босс, биом):**\nНапример: _Зенит, Плантера, Терра-меч_")
     await callback.answer()
 
 @dp.message(SearchState.wait_item_name)
 async def search_process(message: types.Message, state: FSMContext):
     query = message.text.strip()
-    status_msg = await message.answer("🔄 *Листаю страницы Wiki...*")
+    status_msg = await message.answer("🔄 *Подключаюсь к Wiki (скачиваю данные)...*")
     
     # 1. Качаем данные
     wiki_data = await get_wiki_content(query)
     
     if not wiki_data:
-        await status_msg.edit_text(f"❌ Статья по запросу «{query}» не найдена.\nПопробуйте написать точнее.")
+        await status_msg.edit_text(f"❌ Статья «{query}» не найдена на Wiki.\nПопробуйте написать точнее (например, не 'меч', а 'Зенит').")
         return
 
     # 2. Анализируем через ИИ
-    await status_msg.edit_text(f"🧠 *Изучаю статью «{wiki_data['title']}»...*")
+    await status_msg.edit_text(f"🧠 *Анализирую рецепты и таблицы для «{wiki_data['title']}»...*")
     ai_answer = await generate_answer(query, wiki_data)
     
     # 3. Выдаем результат
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🔗 Источник (Wiki)", url=wiki_data['url']))
+    builder.row(types.InlineKeyboardButton(text="🔗 Читать на сайте", url=wiki_data['url']))
     builder.row(types.InlineKeyboardButton(text="🔎 Искать еще", callback_data="m_search"))
     builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
     
+    # Обрезаем ответ, если он слишком длинный для Telegram (лимит 4096)
+    if len(ai_answer) > 4000:
+        ai_answer = ai_answer[:4000] + "...\n(Читать далее на сайте)"
+
     await status_msg.edit_text(
         f"📚 **{wiki_data['title']}**\n\n{ai_answer}",
         reply_markup=builder.as_markup(),
@@ -147,12 +161,14 @@ async def search_process(message: types.Message, state: FSMContext):
     )
     await state.clear()
 
-# ==========================================
-# ОСТАЛЬНЫЕ ФУНКЦИИ (БОССЫ, КЛАССЫ И Т.Д.)
-# ==========================================
-# (Здесь вставь весь остальной код: recipes, checklist_data, handlers для боссов, алхимии и т.д.
-#  Я не дублирую их, чтобы код влез в сообщение, но они должны быть тут)
 
+# ==========================================
+# (СЮДА ВСТАВЬ ОСТАЛЬНОЙ КОД: 
+#  RECIPES, CHECKLIST_DATA, 
+#  Обработчики m_bosses, m_alchemy, m_npcs, m_calc из предыдущих файлов)
+# ==========================================
+
+# --- ГЛАВНОЕ МЕНЮ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, command: CommandObject = None, state: FSMContext = None):
     if state: await state.clear()
@@ -160,14 +176,14 @@ async def cmd_start(message: types.Message, command: CommandObject = None, state
     save_user(message.from_user.id, message.from_user.username, ref)
 
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🧠 Умный поиск (Wiki+AI)", callback_data="m_search"))
+    builder.row(types.InlineKeyboardButton(text="🧠 Умный поиск (Wiki RAG)", callback_data="m_search"))
     builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
                 types.InlineKeyboardButton(text="🛡️ Классы", callback_data="m_classes"))
     builder.row(types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"),
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
     builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
     
-    await message.answer("🛠 **Terraria Bot**\nЯ читаю Wiki за тебя! Что найти?", reply_markup=builder.as_markup())
+    await message.answer("🛠 **Terraria Bot**\nЯ читаю Wiki за тебя! Спроси меня о крафте или боссе.", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
