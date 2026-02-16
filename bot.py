@@ -23,7 +23,6 @@ async def main():
     dp.include_router(calculators.router)
     dp.include_router(randomizer.router)
     dp.include_router(world_seeds.router)
-    dp.include_router(pylons.router)
 
     # Запуск бота
     print("Бот запущен и готов к охоте на боссов!")
