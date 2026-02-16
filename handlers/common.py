@@ -44,8 +44,7 @@ async def main_menu(event: types.Message | types.CallbackQuery):
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     # В блоке, где создаешь кнопки меню:
-    builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"),
-                types.InlineKeyboardButton(text="💎 Пилоны", callback_data="m_pylons"))
+    builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"))
 
     
     text = "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я твой личный гид. Выбери раздел для изучения:"
