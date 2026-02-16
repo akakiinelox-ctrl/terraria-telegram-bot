@@ -5,10 +5,10 @@ from config import TOKEN
 
 # Импортируем роутеры из всех файлов в папке handlers
 from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer
-
 async def main():
     logging.basicConfig(level=logging.INFO)
-    
+    from handlers import world_seeds, pylons
+
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
 
@@ -23,6 +23,8 @@ async def main():
     dp.include_router(checklist.router)
     dp.include_router(calculators.router)
     dp.include_router(randomizer.router)
+    dp.include_router(world_seeds.router)
+    dp.include_router(pylons.router)
 
     # Запуск бота
     print("Бот запущен и готов к охоте на боссов!")
