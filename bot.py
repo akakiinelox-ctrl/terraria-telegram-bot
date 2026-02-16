@@ -30,6 +30,7 @@ class NPCCalc(StatesGroup):
     choose_biome = State()
     choose_npc1 = State()
     choose_npc2 = State()
+    choose_npc3 = State()
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def get_data(filename):
@@ -64,7 +65,7 @@ def save_user(user_id, username, source="organic"):
     except Exception as e:
         logging.error(f"Ошибка сохранения юзера: {e}")
 
-def calculate_happiness(npc_name, partner_name, biome):
+def calculate_happiness(npc_name, partners, biome):
     npc_list = get_data('npcs').get('npcs', [])
     npc = next((n for n in npc_list if n["name"] == npc_name), None)
     if not npc: return 1.0, []
@@ -77,20 +78,21 @@ def calculate_happiness(npc_name, partner_name, biome):
         score *= 0.9
         factors.append(f"✅ Любимый биом ({biome})")
     
-    # Проверка соседа (упрощенный поиск по строке)
-    if partner_name:
-        if partner_name in npc.get("loves", ""):
+    # Проверка всех соседей
+    for partner in partners:
+        if not partner: continue
+        if partner in npc.get("loves", ""):
             score *= 0.88
-            factors.append(f"❤️ Обожает {partner_name}")
-        elif partner_name in npc.get("likes", ""):
+            factors.append(f"❤️ Обожает {partner}")
+        elif partner in npc.get("likes", ""):
             score *= 0.94
-            factors.append(f"😊 Нравится {partner_name}")
-        elif partner_name in npc.get("dislikes", ""):
+            factors.append(f"😊 Нравится {partner}")
+        elif partner in npc.get("dislikes", ""):
             score *= 1.06
-            factors.append(f"🤨 Не любит {partner_name}")
-        elif partner_name in npc.get("hates", ""):
+            factors.append(f"🤨 Не любит {partner}")
+        elif partner in npc.get("hates", ""):
             score *= 1.12
-            factors.append(f"😡 Ненавидит {partner_name}")
+            factors.append(f"😡 Ненавидит {partner}")
 
     return round(score, 2), factors
 
@@ -147,9 +149,8 @@ async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "m_npcs")
 async def npc_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья", callback_data="n_calc_start"))
+    builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья (3 NPC)", callback_data="n_calc_start"))
     builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"))
-    builder.row(types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("👥 **Раздел NPC**\n\nЗдесь можно изучить жителей или рассчитать их счастье.", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
@@ -180,26 +181,44 @@ async def n_calc_step3(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(npc1=npc1)
     npcs = get_data('npcs').get('npcs', [])
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="❌ Один (без соседа)", callback_data="nc_n2:None"))
-    for n in npcs:
-        if n['name'] != npc1: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n2:{n['name']}"))
+    for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n2:{n['name']}"))
     builder.adjust(2)
-    await callback.message.edit_text(f"👤 **Первый: {npc1}**\n👥 **Шаг 3: Выберите соседа:**", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await callback.message.edit_text(f"👤 **Первый: {npc1}**\n👥 **Шаг 3: Выберите 2-го соседа:**", reply_markup=builder.as_markup(), parse_mode="Markdown")
     await state.set_state(NPCCalc.choose_npc2)
 
 @dp.callback_query(F.data.startswith("nc_n2:"))
+async def n_calc_step4(callback: types.CallbackQuery, state: FSMContext):
+    npc2 = callback.data.split(":")[1]
+    await state.update_data(npc2=npc2)
+    npcs = get_data('npcs').get('npcs', [])
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="✅ Без третьего", callback_data="nc_n3:None"))
+    for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n3:{n['name']}"))
+    builder.adjust(2)
+    await callback.message.edit_text("👥 **Шаг 4: Добавить 3-го соседа?**", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await state.set_state(NPCCalc.choose_npc3)
+
+@dp.callback_query(F.data.startswith("nc_n3:"))
 async def n_calc_final(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    npc2_name = callback.data.split(":")[1]
-    if npc2_name == "None": npc2_name = None
-    biome, npc1_name = data['biome'], data['npc1']
+    npc3_name = callback.data.split(":")[1]
+    if npc3_name == "None": npc3_name = None
     
-    res1, f1 = calculate_happiness(npc1_name, npc2_name, biome)
-    text = f"📊 **Результат расселения ({biome}):**\n\n👤 **{npc1_name}:**\n└ Цены: `{int(res1*100)}%`\n└ {', '.join(f1) if f1 else 'Нейтрально'}\n"
+    biome = data['biome']
+    names = [data['npc1'], data['npc2']]
+    if npc3_name: names.append(npc3_name)
     
-    if npc2_name:
-        res2, f2 = calculate_happiness(npc2_name, npc1_name, biome)
-        text += f"\n👤 **{npc2_name}:**\n└ Цены: `{int(res2*100)}%`\n└ {', '.join(f2) if f2 else 'Нейтрально'}"
+    text = f"📊 **Итоги расселения ({biome}):**\n━━━━━━━━━━━━━━\n"
+    
+    for current in names:
+        others = [n for n in names if n != current]
+        res, factors = calculate_happiness(current, others, biome)
+        
+        pylon_status = "✅ <b>ПРОДАСТ ПИЛОН</b>" if res <= 0.90 else "❌ Не продаст пилон"
+        
+        text += f"👤 <b>{current}</b>\n"
+        text += f"└ Цены: <code>{int(res*100)}%</code> | {pylon_status}\n"
+        text += f"└ <i>{', '.join(factors) if factors else 'Нейтрально'}</i>\n\n"
     
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🔄 Заново", callback_data="n_calc_start"),
@@ -207,6 +226,7 @@ async def n_calc_final(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     await state.clear()
 
+# --- СПИСОК И ИНФО NPC ---
 @dp.callback_query(F.data == "n_list")
 async def npc_list_all(callback: types.CallbackQuery):
     npcs = get_data('npcs').get('npcs', [])
