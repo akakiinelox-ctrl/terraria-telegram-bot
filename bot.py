@@ -23,24 +23,24 @@ class SearchState(StatesGroup):
     wait_query = State()
 
 # ==========================================
-# 🧠 МОЗГ: УЛЬТИМАТИВНЫЙ ГИД (ФИКС ГАЛЛЮЦИНАЦИЙ)
+# 🧠 МОЗГ: БЕЗОШИБОЧНЫЙ ГИД (ФИКС ВСЕХ ОШИБОК)
 # ==========================================
 
 async def ask_guide_ai(message_to_edit: types.Message, query: str):
     if not client:
-        await message_to_edit.edit_text("❌ Ошибка: API ключ не настроен.")
+        await message_to_edit.edit_text("❌ Ошибка: API ключ Groq не настроен.")
         return
 
-    # МАКСИМАЛЬНО ЖЕСТКИЙ ПРОМТ ДЛЯ ТОЧНОСТИ
+    # МАКСИМАЛЬНО СТРОГИЙ ПРОМТ
     system_prompt = (
-        "Ты — база данных игры Terraria 1.4.4. Твоя задача — давать 100% достоверную информацию. "
-        "ЗАПРЕЩЕНО: выдумывать предметы, путать боссов или условия активации событий. "
-        "Если ты не уверен в ответе на 100%, напиши: 'Путник, даже я не помню этого, загляни в официальную Wiki'. "
-        "\n\nПРАВИЛА ОФОРМЛЕНИЯ:"
-        "\n- Используй ТОЛЬКО HTML (<b>, <i>, <code>, <u>)."
-        "\n- Название предмета/босса всегда выделяй <b>жирным</b>."
-        "\n- Рецепты пиши в формате: <code>Предмет + Предмет = Результат (Место)</code>."
-        "\n- Всегда используй эмодзи для разделов."
+        "Ты — официальный Гид из Terraria 1.4.4. Твоя задача — давать ИСКЛЮЧИТЕЛЬНО точные ответы. "
+        "Если ты не знаешь ответа или сомневаешься — не выдумывай, а отправь игрока на Wiki. "
+        "\n\nЖЕСТКИЕ ПРАВИЛА:"
+        "\n1. ХАРДМОД: Активируется ТОЛЬКО после убийства Стены Плоти (Wall of Flesh). Никаких исключений."
+        "\n2. БОССЫ: Не выдумывай новых боссов. Используй только тех, что есть в игре."
+        "\n3. КРАФТ: Пиши точные ингредиенты. Если это сложный предмет (Зенит, Сапоги терра-искры), распиши все компоненты."
+        "\n4. СТИЛЬ: Используй HTML-разметку (<b>, <i>, <code>). Запрещено использовать Markdown."
+        "\n5. Тон: Дружелюбный, профессиональный, экспертный."
     )
 
     try:
@@ -50,8 +50,8 @@ async def ask_guide_ai(message_to_edit: types.Message, query: str):
                 {"role": "user", "content": query}
             ],
             model="llama-3.3-70b-versatile",
-            # ТЕМПЕРАТУРА 0.1 ДЕЛАЕТ ЕГО МАКСИМАЛЬНО ТОЧНЫМ
-            temperature=0.1, 
+            # ТЕМПЕРАТУРА 0 — ЭТО РЕЖИМ СТРОГОГО ФАКТА
+            temperature=0, 
             max_tokens=2048
         )
         
@@ -65,23 +65,22 @@ async def ask_guide_ai(message_to_edit: types.Message, query: str):
         
     except Exception as e:
         logging.error(f"AI Error: {e}")
-        await message_to_edit.edit_text("🤯 <b>Гид:</b> Мои архивы временно недоступны. Попробуй позже!")
+        await message_to_edit.edit_text("🤯 <b>Гид:</b> Мои свитки сгорели! Попробуй задать вопрос позже.")
 
-# --- ОБРАБОТЧИКИ ЧАТА ---
+# --- ОБРАБОТЧИКИ ---
 
 @dp.callback_query(F.data == "m_search")
 async def chat_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SearchState.wait_query)
-    await callback.message.answer("👋 <b>Спрашивай, Террариец!</b>\nЯ отвечу на любой вопрос о крафте, боссах или прогрессии мира.", parse_mode="HTML")
+    await callback.message.answer("👋 <b>Слушаю тебя, Террариец!</b>\nЯ отвечу на любой вопрос о мире игры. Что тебя интересует?", parse_mode="HTML")
     await callback.answer()
 
 @dp.message(SearchState.wait_query)
 async def chat_process(message: types.Message, state: FSMContext):
-    sent_msg = await message.answer("🤔 <i>Гид сверяется с картами...</i>", parse_mode="HTML")
+    sent_msg = await message.answer("🤔 <i>Гид сверяется с древними записями...</i>", parse_mode="HTML")
     await ask_guide_ai(sent_msg, message.text)
     await state.clear()
 
-# --- ГЛАВНОЕ МЕНЮ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext = None):
     if state: await state.clear()
@@ -89,9 +88,9 @@ async def cmd_start(message: types.Message, state: FSMContext = None):
     builder.row(types.InlineKeyboardButton(text="🧠 Задать вопрос Гиду", callback_data="m_search"))
     builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
                 types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главный экран", callback_data="to_main"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
-    await message.answer("🛠 <b>Terraria Tactical Assistant</b>\nВыбери раздел или нажми на поиск, чтобы пообщаться со мной напрямую.", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await message.answer("🛠 <b>Terraria Tactical Assistant</b>\nЗадавай вопросы или выбирай разделы ниже.", reply_markup=builder.as_markup(), parse_mode="HTML")
 
 @dp.callback_query(F.data == "to_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
