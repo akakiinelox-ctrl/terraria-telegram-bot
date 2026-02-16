@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher
 from config import TOKEN
 
 # Импортируем роутеры из всех файлов в папке handlers
-from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer, world_seeds
+from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer, world_seeds, crafting 
 async def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -12,6 +12,7 @@ async def main():
     dp = Dispatcher()
 
     # Подключаем все модули (роутеры)
+    dp.include_router(crafting.router)
     dp.include_router(common.router)
     dp.include_router(npc.router)
     dp.include_router(bosses.router)
