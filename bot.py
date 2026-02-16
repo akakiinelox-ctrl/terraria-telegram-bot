@@ -4,10 +4,9 @@ from aiogram import Bot, Dispatcher
 from config import TOKEN
 
 # Импортируем роутеры из всех файлов в папке handlers
-from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer
+from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer, world_seeds, pylons
 async def main():
     logging.basicConfig(level=logging.INFO)
-    from handlers import world_seeds, pylons
 
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
