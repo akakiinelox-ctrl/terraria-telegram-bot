@@ -5,40 +5,46 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 router = Router()
 
 CHALLENGES = {
-    "class": [
-        "🏹 <b>Лучник:</b> Используй только деревянные стрелы до Скелетрона.",
-        "🧙 <b>Маг:</b> Носи только кактусовую броню до убийства Стены Плоти.",
-        "🐍 <b>Призыватель:</b> Победи Королеву Слизней, используя только хлысты.",
-        "⚔️ <b>Воин:</b> Не используй мечи со снарядами (только чистый ближний бой)."
-    ],
-    "goal": [
-        "🏺 Найди и собери 10 разных статуй за один заход.",
-        "🏰 Построй дом для NPC на парящем острове.",
-        "🌋 Осуши небольшое озеро лавы в аду.",
-        "🧱 Собери 999 блоков метеорита."
+    "easy": [
+        "🌲 Победи Глаз Ктулху, используя только метательные ножи.",
+        "🏡 Построй 5 домов, используя только кактусы.",
+        "⛏️ Найди 5 Кристаллов Жизни за один игровой день."
     ],
     "hard": [
-        "💀 <b>Хардкор:</b> Победи Глаз Ктулху, не используя зелья лечения.",
-        "🧨 <b>Подрывник:</b> Убивай боссов только взрывчаткой.",
-        "🌑 <b>Ночной кошмар:</b> Проведи всю ночь в джунглях без факелов."
+        "🌋 Убей Стену Плоти, будучи одетым в броню из пчел.",
+        "🌑 Проведи всю ночь в Джунглях Хардмода без факелов.",
+        "🧨 Используй только взрывчатку для убийства Скелетрона."
+    ],
+    "insane": [
+        "💀 <b>True Melee:</b> Убей Плантеру мечом без вылетающих снарядов.",
+        "🧜‍♂️ Победи Герцога Рыброна до убийства Механических боссов.",
+        "🧘 <b>No Hit:</b> Победи Короля Слизней, не получив ни одного удара."
+    ],
+    "fun": [
+        "🎭 Перекрась всех NPC в разные цвета.",
+        "⛳ Построй поле для гольфа через весь биом Пустыни.",
+        "🐰 Собери коллекцию из 10 разных видов зайцев в сундук."
     ]
 }
 
 @router.callback_query(F.data == "m_random")
 async def random_menu(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🎭 Рандомный челлендж", callback_data="rnd_get"))
+    builder.row(types.InlineKeyboardButton(text="🟢 Легкие", callback_data="r_get:easy"),
+                types.InlineKeyboardButton(text="🟡 Сложные", callback_data="r_get:hard"))
+    builder.row(types.InlineKeyboardButton(text="🔴 БЕЗУМИЕ", callback_data="r_get:insane"),
+                types.InlineKeyboardButton(text="🎈 Фан", callback_data="r_get:fun"))
     builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
-    await callback.message.edit_text("🎲 <b>Генератор безумия</b>\n\nЕсли тебе скучно — я подберу испытание.", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text("🎲 <b>ГЕНЕРАТОР ИСПЫТАНИЙ</b>\n\nВыбери уровень сложности для своего следующего приключения:", reply_markup=builder.as_markup(), parse_mode="HTML")
 
-@router.callback_query(F.data == "rnd_get")
-async def random_res(callback: types.CallbackQuery):
-    cat = random.choice(list(CHALLENGES.keys()))
-    task = random.choice(CHALLENGES[cat])
+@router.callback_query(F.data.startswith("r_get:"))
+async def get_challenge(callback: types.CallbackQuery):
+    diff = callback.data.split(":")[1]
+    task = random.choice(CHALLENGES[diff])
     
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🔄 Еще один", callback_data="rnd_get"))
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_random"))
+    builder.row(types.InlineKeyboardButton(text="🔄 Другой", callback_data=f"r_get:{diff}"))
+    builder.row(types.InlineKeyboardButton(text="⬅️ К сложностям", callback_data="m_random"))
     
-    await callback.message.edit_text(f"🎲 <b>Твоя задача:</b>\n\n{task}", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text(f"🎲 <b>ТВОЯ ЗАДАЧА:</b>\n\n{task}", reply_markup=builder.as_markup(), parse_mode="HTML")
 
