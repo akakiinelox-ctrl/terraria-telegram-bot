@@ -32,7 +32,7 @@ class NPCCalc(StatesGroup):
     choose_npc2 = State()
     choose_npc3 = State()
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+# --- ЗАГРУЗКА ДАННЫХ ---
 def get_data(filename):
     try:
         with open(f'data/{filename}.json', 'r', encoding='utf-8') as f:
@@ -56,37 +56,86 @@ def save_user(user_id, username, source="organic"):
             json.dump(users, f, indent=2, ensure_ascii=False)
     except: pass
 
+# --- ЛОГИКА СЧАСТЬЯ (УЛЬТИМАТИВНАЯ) ---
 def calculate_happiness(npc_name, partners, biome):
     npc_list = get_data('npcs').get('npcs', [])
     npc = next((n for n in npc_list if n["name"] == npc_name), None)
     if not npc: return 1.0, []
-    score, factors = 1.0, []
+    
+    score = 1.0
+    factors = []
+    
     if npc.get("biome") == biome:
         score *= 0.9
-        factors.append(f"🌳 {biome}")
-    for p in partners:
-        if not p: continue
-        if p in npc.get("loves", ""): score *= 0.88; factors.append(f"❤️ {p}")
-        elif p in npc.get("likes", ""): score *= 0.94; factors.append(f"😊 {p}")
-        elif p in npc.get("dislikes", ""): score *= 1.06; factors.append(f"🤨 {p}")
-        elif p in npc.get("hates", ""): score *= 1.12; factors.append(f"😡 {p}")
+        factors.append(f"🌳 Любимый биом ({biome})")
+    
+    for partner in partners:
+        if not partner or partner == "None": continue
+        if partner in npc.get("loves", ""):
+            score *= 0.88
+            factors.append(f"❤️ Обожает {partner}")
+        elif partner in npc.get("likes", ""):
+            score *= 0.94
+            factors.append(f"😊 Нравится {partner}")
+        elif partner in npc.get("dislikes", ""):
+            score *= 1.06
+            factors.append(f"🤨 Не любит {partner}")
+        elif partner in npc.get("hates", ""):
+            score *= 1.12
+            factors.append(f"😡 Ненавидит {partner}")
+
     return round(score, 2), factors
 
-# --- ДАННЫЕ (РЕЦЕПТЫ И ЧЕК-ЛИСТЫ) ---
+# --- СТАТИЧЕСКИЕ ДАННЫЕ (ЧЕК-ЛИСТЫ) ---
+CHECKLIST_DATA = {
+    "start": {
+        "name": "🌱 Начало (Pre-Boss)",
+        "items": [
+            ("🏠 Деревня", "Построено 5+ домов и заселен Гид и Торговец."),
+            ("❤️ Жизнь", "Найдено минимум 5 Кристаллов жизни."),
+            ("💎 Броня", "Сет из драгоценных камней или Золота/Платины."),
+            ("🔗 Мобильность", "Есть крюк-кошка и любые сапоги на бег."),
+            ("⛏️ Инструменты", "Кирка способна копать Метеорит/Демонит.")
+        ]
+    },
+    "pre_hm": {
+        "name": "🌋 Финал Pre-HM",
+        "items": [
+            ("⚔️ Грань Ночи", "Или топовое оружие твоего класса."),
+            ("❤️ 400 HP", "Здоровье на максимуме для этого этапа."),
+            ("🌋 Адская трасса", "Дорожка в аду длиной минимум в 1500 блоков."),
+            ("🌳 Карантин", "Туннели вокруг порчи/кримзона и дома."),
+            ("🎒 Аксессуары", "Аксессуары перекованы на +4 защиты или урона.")
+        ]
+    },
+    "hardmode_start": {
+        "name": "⚙️ Ранний Хардмод",
+        "items": [
+            ("⚒️ Кузня", "Разрушено 3+ алтаря, есть мифриловая наковальня."),
+            ("🧚 Крылья", "Выбиты первые крылья или куплены у Шамана."),
+            ("🍏 500 HP", "Найдены фрукты жизни в джунглях."),
+            ("🛡️ Титан", "Скрафчена броня из Титана или Адамантита."),
+            ("🔑 Ферма", "Выбита или скрафчена Ключ-форма/Световой ключ.")
+        ]
+    },
+    "endgame": {
+        "name": "🌙 Финал (Мунлорд)",
+        "items": [
+            ("🛸 Транспорт", "Получен бесконечный полет (НЛО или Метла)."),
+            ("🔫 Лунные башни", "Создано оружие из небесных фрагментов."),
+            ("🩺 Реген-станция", "Арена с медом, лампами и статуями на HP."),
+            ("🏆 Эндгейм сет", "Броня Жука, Спектральная или Тики/Шroomite.")
+        ]
+    }
+}
+
 RECIPES = {
-    ("Дневноцвет", "Руда"): "🛡️ Зелье железной кожи",
+    ("Дневноцвет", "Руда"): "🛡️ Зелье железной кожи (+8 защиты)",
     ("Дневноцвет", "Гриб"): "❤️ Зелье регенерации",
     ("Дневноцвет", "Линза"): "🏹 Зелье лучника",
     ("Луноцвет", "Рыба-призрак"): "👻 Зелье невидимости",
-    ("Луноцвет", "Падшая звезда"): "🔮 Зелье маны",
-    ("Смертоцвет", "Гемопшик"): "💢 Зелье ярости",
-}
-
-CHECKLIST_DATA = {
-    "start": {"name": "🌱 Начало", "items": [("🏠 Деревня", "5+ домов."), ("❤️ Жизнь", "5+ кристаллов."), ("💎 Броня", "Золото/Платина."), ("🔗 Кошка", "Есть крюк.")]},
-    "pre_hm": {"name": "🌋 Финал Pre-HM", "items": [("⚔️ Оружие", "Грань Ночи."), ("❤️ 400 HP", "Максимум."), ("🌋 Дорога", "Трасса в аду.")]},
-    "hardmode_start": {"name": "⚙️ Хардмод", "items": [("⚒️ Кузня", "3 алтаря."), ("🧚 Крылья", "Есть полет."), ("🍏 500 HP", "Фрукты жизни.")]},
-    "endgame": {"name": "🌙 Финал", "items": [("🛸 Полет", "Бесконечный."), ("🔫 Башни", "Лунные пушки.")]}
+    ("Луноцвет", "Падшая звезда"): "🔮 Зелье регенерации маны",
+    ("Смертоцвет", "Гемопшик"): "💢 Зелье ярости (+10% крита)",
 }
 
 # ==========================================
@@ -109,7 +158,7 @@ async def cmd_start(message: types.Message, command: CommandObject = None, state
                 types.InlineKeyboardButton(text="📋 Чек-лист", callback_data="m_checklist"))
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     
-    text = "🛠 **Terraria Tactical Assistant**\n\nВыберите раздел:"
+    text = "🛠 **Terraria Tactical Assistant**\n\nПривет, Террариец! Я помогу тебе подготовиться к любой угрозе. Выбери раздел:"
     if isinstance(message, types.CallbackQuery):
         await message.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
     else:
@@ -120,7 +169,7 @@ async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     await cmd_start(callback.message, None, state)
 
 # ==========================================
-# 👥 РАЗДЕЛ NPC И СУПЕР-КАЛЬКУЛЯТОР
+# 👥 РАЗДЕЛ NPC И КАЛЬКУЛЯТОР (ИНТЕРАКТИВ)
 # ==========================================
 @dp.callback_query(F.data == "m_npcs")
 async def npc_main(callback: types.CallbackQuery):
@@ -129,7 +178,7 @@ async def npc_main(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"))
     builder.row(types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
-    await callback.message.edit_text("👥 **Раздел NPC**", reply_markup=builder.as_markup(), parse_mode="Markdown")
+    await callback.message.edit_text("👥 **Раздел NPC**\n\nРассчитай счастье для скидок или изучи условия прихода жителей.", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "nc_start")
 async def nc_step1(callback: types.CallbackQuery, state: FSMContext):
@@ -168,37 +217,57 @@ async def nc_step4(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="✅ Расчёт (только 2)", callback_data="nc_n3:None"))
     for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n3:{n['name']}"))
     builder.adjust(2)
-    await callback.message.edit_text("👥 **Шаг 4: Добавить 3-го NPC?**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("👥 **Шаг 4: Добавить 3-го соседа?**", reply_markup=builder.as_markup())
     await state.set_state(NPCCalc.choose_npc3)
 
 @dp.callback_query(F.data.startswith("nc_n3:"))
 async def nc_final(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     npc3 = callback.data.split(":")[1]
-    biome = data['biome']
-    names = [data['npc1'], data['npc2']]
+    biome, npc1, npc2 = data['biome'], data['npc1'], data['npc2']
+    names = [npc1, npc2]
     if npc3 != "None": names.append(npc3)
     
-    res_text = f"📊 **Расселение: {biome}**\n"
+    res_text = f"📊 **Итоги расселения: {biome}**\n━━━━━━━━━━━━━━"
     for cur in names:
         others = [n for n in names if n != cur]
         mod, facts = calculate_happiness(cur, others, biome)
         status = "✅ <b>ПИЛОН</b>" if mod <= 0.90 else "❌ Нет"
-        res_text += f"\n🔹 <b>{cur}</b>\n└ Цена: <code>{int(mod*100)}%</code> | {status}\n└ <i>{', '.join(facts) if facts else '—'}</i>\n"
+        res_text += f"\n\n🔹 <b>{cur}</b>\n└ Цена: <code>{int(mod*100)}%</code> | {status}\n└ <i>{', '.join(facts) if facts else 'Нейтрально'}</i>"
 
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔄 Заново", callback_data="nc_start")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
     await callback.message.edit_text(res_text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.clear()
 
+@dp.callback_query(F.data == "n_list")
+async def npc_list_all(callback: types.CallbackQuery):
+    npcs = get_data('npcs').get('npcs', [])
+    builder = InlineKeyboardBuilder()
+    for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"n_i:{n['name']}"))
+    builder.adjust(2).row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
+    await callback.message.edit_text("👤 **Список всех жителей:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("n_i:"))
+async def npc_detail(callback: types.CallbackQuery):
+    name = callback.data.split(":")[1]
+    npc = next(n for n in get_data('npcs')['npcs'] if n['name'] == name)
+    txt = (f"👤 **{npc['name']}**\n━━━━━━━━━━━━━━\n📥 **Приход:** {npc.get('arrival', 'Стандарт')}\n"
+           f"📍 **Биом:** {npc['biome']}\n🎁 **Бонус:** {npc.get('bonus', 'Нет')}\n\n"
+           f"❤️ **Любит:** {npc['loves']}\n😊 **Нравится:** {npc['likes']}")
+    await callback.message.edit_text(txt, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="n_list")).as_markup(), parse_mode="Markdown")
+
+@dp.callback_query(F.data == "n_tips")
+async def npc_tips(callback: types.CallbackQuery):
+    text = "🏡 **Советы по расселению:**\n1. Соседство более 3 NPC отменяет бонус одиночества.\n2. Счастье напрямую влияет на цену перековки у Гоблина.\n3. Пилоны продаются только если NPC «Обожает» соседа или биом."
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs")).as_markup())
+
 # ==========================================
-# 👾 БОССЫ И СОБЫТИЯ
+# 👾 БОССЫ
 # ==========================================
 @dp.callback_query(F.data == "m_bosses")
 async def bosses_main(callback: types.CallbackQuery):
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🟢 Pre-HM", callback_data="b_l:pre_hm"), types.InlineKeyboardButton(text="🔴 HM", callback_data="b_l:hm"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
-    await callback.message.edit_text("👹 **Выберите этап:**", reply_markup=builder.as_markup())
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🟢 Pre-HM", callback_data="b_l:pre_hm"), types.InlineKeyboardButton(text="🔴 HM", callback_data="b_l:hm")).row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
+    await callback.message.edit_text("👹 **Выберите категорию боссов:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("b_l:"))
 async def bosses_list(callback: types.CallbackQuery):
@@ -207,18 +276,28 @@ async def bosses_list(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for k, v in data.items(): builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"b_s:{st}:{k}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_bosses"))
-    await callback.message.edit_text("🎯 **Выберите босса:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🎯 **Выберите цель:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("b_s:"))
 async def boss_selected(callback: types.CallbackQuery):
     _, st, k = callback.data.split(":")
     boss = get_data('bosses')[st][k]
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🛡️ Гид по классу", callback_data=f"b_g:{st}:{k}"), types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"b_f:{st}:{k}:drops"))
-    builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{st}:{k}:tactics"))
+    builder.row(types.InlineKeyboardButton(text="🛡️ Снаряжение", callback_data=f"b_g:{st}:{k}"), types.InlineKeyboardButton(text="🎁 Дроп", callback_data=f"b_f:{st}:{k}:drops"))
+    builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{st}:{k}:tactics"), types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"b_f:{st}:{k}:arena"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_l:{st}"))
     await callback.message.edit_text(f"📖 **{boss['name']}**\n\n{boss['general']}", reply_markup=builder.as_markup(), parse_mode="Markdown")
 
+@dp.callback_query(F.data.startswith("b_f:"))
+async def boss_field_detail(callback: types.CallbackQuery):
+    _, st, k, fld = callback.data.split(":")
+    boss = get_data('bosses')[st][k]
+    txt = boss.get(fld, "Нет данных.")
+    await callback.message.edit_text(f"📝 **Инфо:**\n\n{txt}", reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{st}:{k}")).as_markup(), parse_mode="Markdown")
+
+# ==========================================
+# ⚔️ СОБЫТИЯ
+# ==========================================
 @dp.callback_query(F.data == "m_events")
 async def events_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🟢 Pre-HM", callback_data="ev_l:pre_hm"), types.InlineKeyboardButton(text="🔴 HM", callback_data="ev_l:hm")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
@@ -231,68 +310,136 @@ async def events_list(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for k, v in data.items(): builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"ev_i:{st}:{k}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_events"))
-    await callback.message.edit_text("🌊 **Нашествия:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🌊 **Выберите нашествие:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("ev_i:"))
 async def event_info(callback: types.CallbackQuery):
     _, st, k = callback.data.split(":")
     ev = get_data('events')[st][k]
-    text = f"⚔️ **{ev['name']}**\n\n📢 **Триггер:** {ev['trigger']}\n🎁 **Дроп:** {ev['drops']}\n🛠 **Тактика:** {ev.get('arena_tip', '—')}"
+    text = (f"⚔️ **{ev['name']}**\n━━━━━━━━━━━━━━\n🔥 **Сложность:** {ev.get('difficulty', '???')}\n"
+            f"💰 **Профит:** {ev.get('profit', '???')}\n\n📢 **Триггер:** {ev['trigger']}\n"
+            f"🌊 **Волны:** {ev['waves']}\n🎁 **Дроп:** {ev['drops']}\n\n🛠 **ТАКТИКА:** \n_{ev.get('arena_tip', 'Стандартная арена.')}_")
     await callback.message.edit_text(text, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"ev_l:{st}")).as_markup(), parse_mode="Markdown")
 
 # ==========================================
-# 📋 ЧЕК-ЛИСТЫ И РЫБАЛКА
+# 📋 ЧЕК-ЛИСТЫ (ПОЛНЫЕ)
 # ==========================================
 @dp.callback_query(F.data == "m_checklist")
 async def checklist_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for k, v in CHECKLIST_DATA.items(): builder.row(types.InlineKeyboardButton(text=f"📍 {v['name']}", callback_data=f"chk_s:{k}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-    await callback.message.edit_text("📋 **Проверь свою готовность:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📋 **Чек-листы готовности:**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("chk_s:"))
 async def checklist_show(callback: types.CallbackQuery):
     cat = callback.data.split(":")[1]
     items = CHECKLIST_DATA[cat]['items']
-    text = f"📋 **{CHECKLIST_DATA[cat]['name']}**\n\n"
+    text = f"📋 **Этап: {CHECKLIST_DATA[cat]['name']}**\n━━━━━━━━━━━━━━\n\n"
     for icon, desc in items: text += f"{icon} — {desc}\n"
     await callback.message.edit_text(text, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_checklist")).as_markup())
 
+# ==========================================
+# 🎣 РЫБАЛКА
+# ==========================================
 @dp.callback_query(F.data == "m_fishing")
 async def fishing_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🐠 Квесты", callback_data="fish_q"), types.InlineKeyboardButton(text="📦 Ящики", callback_data="fish_c")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-    await callback.message.edit_text("🎣 **Рыбалка:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🎣 **Справочник Рыболова**", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data == "fish_q")
-async def fish_quests(callback: types.CallbackQuery):
+async def fish_quests_biomes(callback: types.CallbackQuery):
     data = get_data('fishing').get('quests', {})
     builder = InlineKeyboardBuilder()
     for b in data.keys(): builder.add(types.InlineKeyboardButton(text=b, callback_data=f"fq_b:{b}"))
     builder.adjust(2).row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_fishing"))
-    await callback.message.edit_text("📍 **Биом квеста:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("📍 **Выберите биом квеста:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("fq_b:"))
+async def fish_quest_list(callback: types.CallbackQuery):
+    b = callback.data.split(":")[1]
+    data = get_data('fishing').get('quests', {}).get(b, [])
+    txt = f"📍 **Биом: {b}**\n\n"
+    for f in data: txt += f"🐟 **{f['name']}**\n└ 💡 {f['info']}\n\n"
+    await callback.message.edit_text(txt, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="fish_q")).as_markup())
+
+@dp.callback_query(F.data == "fish_c")
+async def fish_crates_list(callback: types.CallbackQuery):
+    data = get_data('fishing').get('crates', [])
+    txt = "📦 **Рыболовные ящики:**\n\n"
+    for c in data: txt += f"🔹 {c['name']}\n└ 🎁 Лут: {c['drop']}\n\n"
+    await callback.message.edit_text(txt, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_fishing")).as_markup())
 
 # ==========================================
-# 🧪 АЛХИМИЯ И РАНДОМ
+# 🧪 АЛХИМИЯ
 # ==========================================
 @dp.callback_query(F.data == "m_alchemy")
 async def alchemy_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔮 Варить", callback_data="alc_craft"), types.InlineKeyboardButton(text="📜 Книга", callback_data="alc_book")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
     await callback.message.edit_text("🧪 **Алхимия:**", reply_markup=builder.as_markup())
 
+@dp.callback_query(F.data == "alc_craft")
+async def alc_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(AlchemyStates.choosing_ingredients)
+    await state.update_data(mix=[])
+    builder = InlineKeyboardBuilder()
+    ings = ["Дневноцвет", "Луноцвет", "Смертоцвет", "Гриб", "Руда", "Линза", "Падшая звезда", "Рыба-призрак"]
+    for i in ings: builder.add(types.InlineKeyboardButton(text=i, callback_data=f"ing:{i}"))
+    builder.adjust(2).row(types.InlineKeyboardButton(text="🔥 Сварить!", callback_data="alc_mix"))
+    await callback.message.edit_text("🌿 **Выберите 2 ингредиента:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("ing:"))
+async def alc_add(callback: types.CallbackQuery, state: FSMContext):
+    ing = callback.data.split(":")[1]
+    data = await state.get_data()
+    mix = data.get('mix', [])
+    if len(mix) < 2 and ing not in mix:
+        mix.append(ing)
+        await state.update_data(mix=mix)
+        await callback.answer(f"Добавлено: {ing}")
+    else: await callback.answer("Нельзя добавить!")
+
+@dp.callback_query(F.data == "alc_mix")
+async def alc_final(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    mix = data.get('mix', [])
+    if len(mix) < 2: return await callback.answer("Нужно 2 ингредиента!")
+    res = RECIPES.get(tuple(sorted(mix)), "💥 Бесполезная жижа...")
+    await callback.message.edit_text(f"🧪 **Результат:**\n\n{res}", reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔄 Еще", callback_data="alc_craft")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main")).as_markup())
+    await state.clear()
+
+# ==========================================
+# 🎲 РАНДОМ
+# ==========================================
 @dp.callback_query(F.data == "m_random")
 async def random_challenge(callback: types.CallbackQuery):
     ch = [
-        "🏹 **Путь Робин Гуда:** Только луки, без брони.",
-        "🧨 **Подрывник:** Урон только взрывчаткой.",
-        "⚔️ **Истинный Воин:** Мечи без снарядов."
+        "🏹 **Путь Робин Гуда:** Только деревянные луки, природная броня.",
+        "🧨 **Подрывник:** Урон только взрывчаткой, убей Пожирателя гранатами.",
+        "⚔️ **Истинный Воин:** Мечи без снарядов, убей Короля Слизней вплотную.",
+        "🐍 **Заклинатель змей:** Только хлысты и призванные существа, без брони."
     ]
-    await callback.message.edit_text(f"🎲 **Челлендж:**\n\n{random.choice(ch)}", reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔄 Еще", callback_data="m_random")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main")).as_markup(), parse_mode="Markdown")
+    await callback.message.edit_text(f"🎲 **Челлендж:**\n\n{random.choice(ch)}", reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🔄 Другой", callback_data="m_random")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main")).as_markup(), parse_mode="Markdown")
 
 # --- ОСТАЛЬНОЕ (КАЛЬКУЛЯТОРЫ, КЛАССЫ) ---
 @dp.callback_query(F.data == "m_calc")
 async def calc_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="💰 Гоблин", callback_data="calc_goblin"), types.InlineKeyboardButton(text="⛏️ Руда", callback_data="calc_ores")).row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-    await callback.message.edit_text("🧮 **Расчеты:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🧮 **Технический отдел:**", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data == "calc_goblin")
+async def goblin_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(CalcState.wait_goblin_price)
+    await callback.message.answer("💰 **Введите цену перековки (золото):**")
+
+@dp.message(CalcState.wait_goblin_price)
+async def goblin_finish(message: types.Message, state: FSMContext):
+    try:
+        p = float(message.text.replace(",", "."))
+        txt = (f"💰 **Цены для {p} золота:**\n\n😐 База: {p}\n😊 Скидка 17%: {round(p*0.83, 2)}\n❤️ Макс 33%: {round(p*0.67, 2)}")
+        await message.answer(txt, reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_calc")).as_markup())
+        await state.clear()
+    except: await message.answer("Введите число!")
 
 @dp.callback_query(F.data == "m_classes")
 async def classes_menu(callback: types.CallbackQuery):
@@ -300,16 +447,14 @@ async def classes_menu(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for k, v in data.items(): builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"cl_s:{k}"))
     builder.row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-    await callback.message.edit_text("🛡️ **Классы:**", reply_markup=builder.as_markup())
+    await callback.message.edit_text("🛡️ **Выбор класса:**", reply_markup=builder.as_markup())
 
-# --- АДМИНКА ---
 @dp.message(Command("stats"))
 async def admin_stats(message: types.Message):
     if message.from_user.id != ADMIN_ID: return
     users = get_data('users')
     await message.answer(f"📊 **Всего юзеров:** {len(users)}")
 
-# --- ЗАПУСК ---
 async def main():
     await dp.start_polling(bot)
 
