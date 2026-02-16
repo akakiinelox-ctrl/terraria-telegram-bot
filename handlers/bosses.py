@@ -49,7 +49,7 @@ async def boss_field(callback: types.CallbackQuery):
     boss = get_data()[stage][key]
     text = boss.get(field, "Нет данных.")
     builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ К боссу", callback_data=f"b_s:{stage}:{key}"))
-    await callback.message.edit_text(f"📝 <b>Инфо ({field}):</b>\n\n{text}", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text(f"📝 <b>Инфо:</b>\n\n{text}", reply_markup=builder.as_markup(), parse_mode="HTML")
 
 @router.callback_query(F.data.startswith("b_g:"))
 async def boss_gear(callback: types.CallbackQuery):
@@ -66,8 +66,15 @@ async def boss_gear_list(callback: types.CallbackQuery):
     _, stage, key, cid = callback.data.split(":")
     items = get_data()[stage][key]['classes'][cid]
     builder = InlineKeyboardBuilder()
-    for item in items:
-        builder.row(types.InlineKeyboardButton(text=item['name'], callback_data="none"))
+    for i, item in enumerate(items):
+        # Теперь передаем индекс предмета в callback_data
+        builder.row(types.InlineKeyboardButton(text=item['name'], callback_data=f"b_gi:{stage}:{key}:{cid}:{i}"))
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_g:{stage}:{key}"))
-    await callback.message.edit_text("🎒 <b>Рекомендуемые предметы:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text("🎒 <b>Рекомендуемые предметы:</b>\n<i>(Нажми на предмет, чтобы увидеть крафт)</i>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
+@router.callback_query(F.data.startswith("b_gi:"))
+async def boss_item_craft(callback: types.CallbackQuery):
+    _, stage, key, cid, index = callback.data.split(":")
+    item = get_data()[stage][key]['classes'][cid][int(index)]
+    # Тот самый alert с крафтом
+    await callback.answer(f"🛠 Крафт: {item['craft']}", show_alert=True)
