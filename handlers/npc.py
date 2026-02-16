@@ -20,6 +20,51 @@ def get_data(filename):
             return json.load(f)
     return {}
 
+# Данные для быстрого гайда по пилонам
+PYLONS_LIST = [
+    ("🌲 Лесной", "Торговец + Гид"),
+    ("🌵 Пустынный", "Оружейник + Медсестра"),
+    ("❄️ Снежный", "Механик + Гоблин"),
+    ("🍄 Грибной", "Трюфель + Гид"),
+    ("🌴 Джунгли", "Дриада + Маляр"),
+    ("🌊 Океан", "Рыбак + Пират"),
+    ("🔮 Святой", "Волшебник + Тусовщица"),
+    ("地下 Пещерный", "Трактирщик + Подрывник")
+]
+
+@router.callback_query(F.data == "m_npcs")
+async def npc_menu(callback: types.CallbackQuery):
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья", callback_data="nc_start"))
+    builder.row(types.InlineKeyboardButton(text="💎 Гайд по Пилонам", callback_data="n_pylons"))
+    builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"))
+    builder.row(types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
+    builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
+    await callback.message.edit_text("👥 <b>Раздел NPC и Пилонов</b>\n\nРассчитывай счастье для скидок или смотри готовые пары для телепортов.", reply_markup=builder.as_markup(), parse_mode="HTML")
+
+# --- ГАЙД ПО ПИЛОНАМ ---
+@router.callback_query(F.data == "n_pylons")
+async def pylons_info(callback: types.CallbackQuery):
+    text = "💎 <b>Гид по получению Пилонов</b>\n\nЧтобы NPC продал пилон, он должен быть очень счастлив. Вот самые простые пары для каждого биома:\n\n"
+    for name, pair in PYLONS_LIST:
+        text += f"📍 <b>{name}:</b> {pair}\n"
+    
+    text += "\n💡 <i>Совет: Ставь дома этих пар в пределах 25 блоков друг от друга!</i>"
+    builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
+    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+
+# --- ЛОГИКА КАЛЬКУЛЯТОРА (Без изменений) ---
+@router.callback_query(F.data == "nc_start")
+async def nc_step1(callback: types.CallbackQuery, state: FSMContext):
+    biomes = ["Лес", "Снега", "Пустыня", "Джунгли", "Океан", "Освящение", "Пещеры", "Грибной"]
+    builder = InlineKeyboardBuilder()
+    for b in biomes: builder.add(types.InlineKeyboardButton(text=b, callback_data=f"nc_b:{b}"))
+    builder.adjust(2).row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
+    await callback.message.edit_text("🏙 <b>Шаг 1: Выберите биом:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await state.set_state(NPCCalc.choose_biome)
+
+# ... (Остальной код калькулятора nc_step2, nc_step3, nc_final оставляешь как был)
+
 def calculate_happiness(npc_name, partners, biome):
     data = get_data('npcs')
     npc_list = data.get('npcs', [])
