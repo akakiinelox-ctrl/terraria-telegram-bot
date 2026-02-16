@@ -9,7 +9,8 @@ from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from groq import Groq
+# ИМПОРТИРУЕМ АСИНХРОННЫЙ КЛИЕНТ
+from groq import AsyncGroq 
 
 # --- НАСТРОЙКИ ---
 logging.basicConfig(level=logging.INFO)
@@ -17,8 +18,13 @@ TOKEN = os.getenv("BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ADMIN_ID = 599835907
 
-# Инициализация
-client = Groq(api_key=GROQ_API_KEY)
+# Инициализация АСИНХРОННОГО клиента
+if GROQ_API_KEY:
+    client = AsyncGroq(api_key=GROQ_API_KEY)
+else:
+    logging.error("❌ НЕ НАЙДЕН GROQ_API_KEY! ПРОВЕРЬТЕ НАСТРОЙКИ.")
+    client = None
+
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -55,36 +61,36 @@ def save_user(user_id, username, source="organic"):
     except: pass
 
 # ==========================================
-# 🧠 МОЗГ: СВОБОДНЫЙ ЭКСПЕРТ (GROQ AI)
+# 🧠 МОЗГ: СВОБОДНЫЙ ЭКСПЕРТ (AsyncGroq)
 # ==========================================
 
 async def ask_guide_ai(message_to_edit: types.Message, query: str):
-    """
-    Прямой запрос к ИИ с мощным системным промтом.
-    Никакого поиска статей - чистые знания модели.
-    """
-    
-    # ЭТО САМАЯ ВАЖНАЯ ЧАСТЬ - ИНСТРУКЦИЯ ДЛЯ БОТА
+    if not client:
+        await message_to_edit.edit_text("❌ Ошибка: Нет API ключа Groq.")
+        return
+
+    # ИНСТРУКЦИЯ ДЛЯ БОТА
     system_prompt = (
-        "Ты — Гид из игры Terraria. Ты — ультимативная энциклопедия."
-        "\nТвоя задача: Отвечать на вопросы игроков максимально полезно, точно и структурировано."
-        "\n\nПРАВИЛА ОТВЕТА:"
-        "\n1. СТРУКТУРА: Всегда используй Markdown. Жирный шрифт для названий, списки для крафтов."
-        "\n2. ТОЧНОСТЬ: Ориентируйся на версию Terraria 1.4.4 (Labor of Love). Не выдумывай предметы."
-        "\n3. КРАФТЫ: Если спрашивают «как сделать X», обязательно пиши: Ингредиенты + Рабочее место."
-        "\n4. ПРОГРЕССИЯ: Если спрашивают «что делать после X», давай четкий список боссов или экипировки."
-        "\n5. СТИЛЬ: Будь дружелюбным, используй тематические эмодзи (🌲, 🗡️, 💀, 💎)."
-        "\n6. БАНАЛЬНЫЕ ВОПРОСЫ: На вопросы типа «как сделать верстак» отвечай так же серьезно и подробно."
+        "Ты — Гид из игры Terraria. Ты — эксперт, знающий всё о версии 1.4.4. "
+        "Твоя цель: помогать игрокам с крафтами, боссами и тактиками."
+        "\n\nПРАВИЛА:"
+        "\n1. Будь полезным и точным. Не выдумывай предметы."
+        "\n2. Используй Markdown (жирный текст, списки)."
+        "\n3. Если спрашивают про порядок боссов, дай четкий список."
+        "\n4. Если спрашивают крафт, укажи ингредиенты и рабочее место."
+        "\n5. Общайся дружелюбно, используй эмодзи (🌲, 🗡️, 💀)."
     )
 
     try:
-        chat_completion = client.chat.completions.create(
+        # Асинхронный вызов (важно для Telegram бота)
+        chat_completion = await client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
             ],
-            model="llama-3.3-70b-versatile", # Мощная модель, знает всё о Террарии
-            temperature=0.5, # Баланс между творчеством и точностью
+            # Используем модель Llama 3 (она очень быстрая и умная)
+            model="llama-3.3-70b-versatile", 
+            temperature=0.5, 
         )
         
         response = chat_completion.choices[0].message.content
@@ -97,8 +103,9 @@ async def ask_guide_ai(message_to_edit: types.Message, query: str):
         await message_to_edit.edit_text(response, reply_markup=builder.as_markup(), parse_mode="Markdown")
         
     except Exception as e:
-        logging.error(f"AI Error: {e}")
-        await message_to_edit.edit_text("🤯 **Гид:** Моя голова раскалывается... Что-то пошло не так. Попробуй спросить иначе.")
+        # Выводим ошибку в консоль, чтобы ты мог её увидеть в Railway Logs
+        print(f"🔴 ОШИБКА AI: {e}") 
+        await message_to_edit.edit_text(f"🤯 **Гид:** Ошибка связи с космосом...\nКод ошибки: `{e}`", parse_mode="Markdown")
 
 # --- ОБРАБОТЧИКИ ЧАТА ---
 
@@ -110,27 +117,21 @@ async def chat_start(callback: types.CallbackQuery, state: FSMContext):
         "Спрашивай о чём угодно:\n"
         "▫️ _Как скрафтить Зенит?_\n"
         "▫️ _Броня на мага перед Плантерой?_\n"
-        "▫️ _Где найти Рыбака?_\n"
-        "▫️ _Порядок боссов в хардмоде?_"
+        "▫️ _Кто идет после Пчелы?_"
     )
     await callback.answer()
 
 @dp.message(SearchState.wait_item_name)
 async def chat_process(message: types.Message, state: FSMContext):
     user_query = message.text
-    
     # Анимация "печатает..."
-    sent_msg = await message.answer("🤔 *Листаю справочник...*")
-    
+    sent_msg = await message.answer("🤔 *Гид листает справочник...*")
     # Отправляем запрос ИИ
     await ask_guide_ai(sent_msg, user_query)
-    
-    # Состояние не сбрасываем сразу, чтобы можно было продолжать диалог, 
-    # но в данном случае лучше сбросить и предложить кнопку "Спросить еще"
     await state.clear()
 
 # ==========================================
-# ДАННЫЕ (Твои старые переменные)
+# ДАННЫЕ (РЕЦЕПТЫ, ЧЕК-ЛИСТЫ И Т.Д.)
 # ==========================================
 RECIPES = {
     ("Дневноцвет", "Руда"): "🛡️ Зелье железной кожи (+8 защиты)",
@@ -144,11 +145,10 @@ RECIPES = {
 CHECKLIST_DATA = {
     "start": {"name": "🌱 Старт", "items": [("🏠 Дом", "Построй дом"), ("❤️ ХП", "Собери сердца")]},
     "pre_hm": {"name": "🌋 Пре-Хардмод", "items": [("⚔️ Грань Ночи", "Скрафти меч"), ("🌋 Ад", "Сделай мост")]},
-    # (Можешь дополнить, если нужно, но пока хватит для примера)
 }
 
 # ==========================================
-# ОБРАБОТЧИКИ КНОПОК (Боссы, Алхимия и т.д.)
+# ОБРАБОТЧИКИ КНОПОК
 # ==========================================
 
 @dp.message(Command("start"))
@@ -160,12 +160,10 @@ async def cmd_start(message: types.Message, command: CommandObject = None, state
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🧠 Задать вопрос Гиду", callback_data="m_search"))
     builder.row(types.InlineKeyboardButton(text="👾 Боссы", callback_data="m_bosses"),
-                types.InlineKeyboardButton(text="⚔️ События", callback_data="m_events"))
-    builder.row(types.InlineKeyboardButton(text="🛡️ Классы", callback_data="m_classes"),
-                types.InlineKeyboardButton(text="👥 NPC", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🧮 Калькулятор", callback_data="m_calc"),
-                types.InlineKeyboardButton(text="🎣 Рыбалка", callback_data="m_fishing"))
+                types.InlineKeyboardButton(text="🛡️ Классы", callback_data="m_classes"))
     builder.row(types.InlineKeyboardButton(text="🧪 Алхимия", callback_data="m_alchemy"),
+                types.InlineKeyboardButton(text="🧮 Калькулятор", callback_data="m_calc"))
+    builder.row(types.InlineKeyboardButton(text="🎣 Рыбалка", callback_data="m_fishing"),
                 types.InlineKeyboardButton(text="🎲 Скучно", callback_data="m_random"))
     
     await message.answer("🛠 **Terraria Tactical Assistant**\nЯ знаю всё об этом мире. Выбери раздел или просто спроси меня!", reply_markup=builder.as_markup())
@@ -205,7 +203,6 @@ async def boss_selected(callback: types.CallbackQuery):
 async def boss_info_field(callback: types.CallbackQuery):
     _, st, k, f = callback.data.split(":")
     data = get_data('bosses')[st][k]
-    # Проверка на картинку арены
     if f == "arena" and "arena_img" in data:
         await callback.message.answer_photo(data["arena_img"], caption=data.get(f, "."), reply_markup=InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="⬅️", callback_data=f"b_s:{st}:{k}")).as_markup())
     else:
@@ -321,13 +318,10 @@ async def calc_gob_res(message: types.Message, state: FSMContext):
         await state.clear()
     except: await message.answer("Число!")
 
-# --- NPC, ИВЕНТЫ, РЫБАЛКА (Заглушки для кнопок, чтобы не крашилось, если файлов нет) ---
+# --- ЗАГЛУШКА ДЛЯ ОСТАЛЬНЫХ КНОПОК ---
 @dp.callback_query(F.data.in_({"m_npcs", "m_events", "m_fishing", "m_classes", "m_checklist", "m_random"}))
 async def placeholder(callback: types.CallbackQuery):
-    # Тут можно добавить логику, если она нужна, или оставить кнопку "В разработке"
-    await callback.answer("Этот раздел работает в режиме 'Спроси Гида'!", show_alert=True)
-    # Но лучше, если ты скопируешь свои старые функции сюда, если они важны.
-    # Сейчас я сделал так, чтобы бот не падал при нажатии.
+    await callback.answer("Этот раздел есть в базе! Попробуй спросить Гида словами :)", show_alert=True)
 
 # --- ЗАПУСК ---
 async def main():
