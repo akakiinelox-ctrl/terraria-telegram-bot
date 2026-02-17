@@ -45,6 +45,8 @@ async def main_menu(event: types.Message | types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"))
     builder.row(types.InlineKeyboardButton(text="🛠 Древо крафта", callback_data="m_crafting"))
+    builder.row(types.InlineKeyboardButton(text="🔍 Поиск по Вики", callback_data="m_wiki"))
+
 
 
     
