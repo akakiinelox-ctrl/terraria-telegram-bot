@@ -18,6 +18,7 @@ def get_data(filename):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
+    print(f"❌ Ошибка: Файл {path} не найден!")
     return {}
 
 PYLONS_LIST = [
@@ -31,33 +32,29 @@ PYLONS_LIST = [
     ("🌋 Пещерный", "Трактирщик + Подрывник")
 ]
 
-# --- ГЛАВНОЕ МЕНЮ РАЗДЕЛА NPC ---
-@router.callback_query(F.data == "m_npcs")
+# ГЛАВНОЕ МЕНЮ NPC
+@router.callback_query(F.data == "m_npc")
 async def npc_menu(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья", callback_data="nc_start"))
     builder.row(types.InlineKeyboardButton(text="💎 Гайд по Пилонам", callback_data="n_pylons"))
     builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"))
-    builder.row(types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
-    await callback.message.edit_text("👥 <b>Раздел NPC и Пилонов</b>\n\nРассчитывай счастье для скидок или смотри готовые пары для телепортов.", reply_markup=builder.as_markup(), parse_mode="HTML")
+    builder.row(types.InlineKeyboardButton(text="🏡 Советы", callback_data="n_tips"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
+    await callback.message.edit_text("👥 <b>Раздел NPC</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
-# --- ГАЙД ПО ПИЛОНАМ ---
+# ГАЙД ПО ПИЛОНАМ
 @router.callback_query(F.data == "n_pylons")
 async def pylons_info(callback: types.CallbackQuery):
-    text = "💎 <b>Гид по получению Пилонов</b>\n\nЧтобы NPC продал пилон, он должен быть очень счастлив. Вот самые простые пары для каждого биома:\n\n"
+    text = "💎 <b>Гид по Пилонам:</b>\n\n"
     for name, pair in PYLONS_LIST:
         text += f"📍 <b>{name}:</b> {pair}\n"
-    
-    text += "\n💡 <i>Совет: Ставь дома этих пар в пределах 25 блоков друг от друга!</i>"
-    
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npc"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
-# --- ЛОГИКА РАСЧЕТА СЧАСТЬЯ ---
+# --- КАЛЬКУЛЯТОР ---
 def calculate_happiness(npc_name, partners, biome):
     data = get_data('npcs')
     npc_list = data.get('npcs', [])
@@ -80,26 +77,17 @@ def calculate_happiness(npc_name, partners, biome):
         elif partner in npc.get("likes", ""):
             score *= 0.94
             factors.append(f"😊 {partner}")
-        elif partner in npc.get("dislikes", ""):
-            score *= 1.06
-            factors.append(f"🤨 {partner}")
-        elif partner in npc.get("hates", ""):
-            score *= 1.12
-            factors.append(f"😡 {partner}")
-
+    
     return round(score, 2), factors
 
-# --- ШАГИ КАЛЬКУЛЯТОРА ---
 @router.callback_query(F.data == "nc_start")
 async def nc_step1(callback: types.CallbackQuery, state: FSMContext):
     biomes = ["Лес", "Снега", "Пустыня", "Джунгли", "Океан", "Освящение", "Пещеры", "Грибной"]
     builder = InlineKeyboardBuilder()
     for b in biomes: builder.add(types.InlineKeyboardButton(text=b, callback_data=f"nc_b:{b}"))
     builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
-    await callback.message.edit_text("🏙 <b>Шаг 1: Выберите биом:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npc"))
+    await callback.message.edit_text("🏙 <b>Шаг 1: Биом:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_biome)
 
 @router.callback_query(F.data.startswith("nc_b:"))
@@ -109,9 +97,7 @@ async def nc_step2(callback: types.CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n1:{n['name']}"))
     builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
-    await callback.message.edit_text("👤 <b>Шаг 2: Выберите первого NPC:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text("👤 <b>Шаг 2: Кто живет?</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc1)
 
 @router.callback_query(F.data.startswith("nc_n1:"))
@@ -121,9 +107,7 @@ async def nc_step3(callback: types.CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n2:{n['name']}"))
     builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
-    await callback.message.edit_text("👥 <b>Шаг 3: Выберите второго NPC:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text("👥 <b>Шаг 3: Сосед 1:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc2)
 
 @router.callback_query(F.data.startswith("nc_n2:"))
@@ -131,12 +115,10 @@ async def nc_step4(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(npc2=callback.data.split(":")[1])
     npcs = get_data('npcs').get('npcs', [])
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="✅ Хватит двоих", callback_data="nc_n3:None"))
+    builder.row(types.InlineKeyboardButton(text="✅ Хватит", callback_data="nc_n3:None"))
     for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"nc_n3:{n['name']}"))
     builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
-    await callback.message.edit_text("👥 <b>Шаг 4: Добавить третьего NPC?</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text("👥 <b>Шаг 4: Сосед 2?</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc3)
 
 @router.callback_query(F.data.startswith("nc_n3:"))
@@ -147,60 +129,47 @@ async def nc_final(callback: types.CallbackQuery, state: FSMContext):
     names = [npc1, npc2]
     if npc3 != "None": names.append(npc3)
     
-    res_text = f"📊 <b>Результат ({biome}):</b>\n━━━━━━━━━━━━━━"
+    res_text = f"📊 <b>Результат ({biome}):</b>"
     for cur in names:
         others = [n for n in names if n != cur]
         mod, facts = calculate_happiness(cur, others, biome)
-        status = "✅ <b>ПРОДАСТ ПИЛОН</b>" if mod <= 0.90 else "❌ Нет пилона"
-        res_text += f"\n\n👤 <b>{cur}</b>\n└ Цена: <code>{int(mod*100)}%</code> | {status}\n└ <i>{', '.join(facts) if facts else 'Нейтрально'}</i>"
+        status = "✅ <b>Пилон!</b>" if mod <= 0.90 else "❌"
+        res_text += f"\n\n👤 <b>{cur}</b>: {int(mod*100)}% | {status}"
 
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🔄 Заново", callback_data="nc_start"))
-    builder.row(types.InlineKeyboardButton(text="👥 К разделу NPC", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
+    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
     await callback.message.edit_text(res_text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.clear()
 
-# --- СПИСОК ЖИТЕЛЕЙ ---
+# СПИСОК ЖИТЕЛЕЙ И ИНФО
 @router.callback_query(F.data == "n_list")
 async def npc_list(callback: types.CallbackQuery):
     npcs = get_data('npcs').get('npcs', [])
     builder = InlineKeyboardBuilder()
     for n in npcs: builder.add(types.InlineKeyboardButton(text=n['name'], callback_data=f"n_i:{n['name']}"))
     builder.adjust(2)
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
-    await callback.message.edit_text("👤 <b>Выберите жителя для справки:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npc"))
+    await callback.message.edit_text("👤 <b>Список жителей:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
-# --- КАРТОЧКА ЖИТЕЛЯ ---
 @router.callback_query(F.data.startswith("n_i:"))
 async def npc_info(callback: types.CallbackQuery):
     name = callback.data.split(":")[1]
+    # Поиск по точному совпадению имени
     npc = next((n for n in get_data('npcs')['npcs'] if n['name'] == name), None)
-    
     if not npc:
-        await callback.answer("Ошибка: NPC не найден", show_alert=True)
-        return
-
-    txt = (f"👤 <b>{npc['name']}</b>\n━━━━━━━━━━━━━━\n📥 <b>Приход:</b> {npc.get('arrival')}\n"
-           f"📍 <b>Биом:</b> {npc['biome']}\n🎁 <b>Бонус:</b> {npc.get('bonus')}\n\n"
-           f"❤️ <b>Любит:</b> {npc['loves']}\n😊 <b>Нравится:</b> {npc['likes']}")
-    
+         await callback.answer("Ошибка: Житель не найден", show_alert=True)
+         return
+         
+    txt = f"👤 <b>{npc['name']}</b>\n📍 Биом: {npc['biome']}\n❤️ Любит: {npc['loves']}\n🤬 Не любит: {npc['dislikes']}"
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="n_list"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="n_list"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
     await callback.message.edit_text(txt, reply_markup=builder.as_markup(), parse_mode="HTML")
 
-# --- СОВЕТЫ ---
 @router.callback_query(F.data == "n_tips")
 async def npc_tips(callback: types.CallbackQuery):
-    text = "🏡 <b>Советы по домам:</b>\n1. Не более 2-3 жителей в одном месте.\n2. Счастье влияет на цены перековки и товаров.\n3. Гоблин и Медсестра — приоритеты для счастья."
-    
+    text = "🏡 <b>Советы:</b> Строй дома парами (2 NPC рядом) в нужных биомах для скидок."
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main")) # <-- Добавил
-    
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npc"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
