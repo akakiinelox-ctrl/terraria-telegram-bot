@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher
 from config import TOKEN
 
 # Импортируем роутеры из всех файлов в папке handlers
-from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer, world_seeds, crafting 
+from handlers import common, npc, bosses, events, classes, fishing, alchemy, checklist, calculators, randomizer, world_seeds, crafting, wiki 
 async def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -24,6 +24,7 @@ async def main():
     dp.include_router(calculators.router)
     dp.include_router(randomizer.router)
     dp.include_router(world_seeds.router)
+    dp.include_router(wiki.router)
 
     # Запуск бота
     print("Бот запущен и готов к охоте на боссов!")
