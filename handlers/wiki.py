@@ -11,121 +11,94 @@ router = Router()
 class WikiStates(StatesGroup):
     waiting_for_query = State()
 
-# Заголовки для имитации браузера
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
 }
 
 def clean_text(text):
-    """Очистка текста от мусора вики-разметки"""
-    text = re.sub(r'\[.*?\]', '', text) # Убираем [1], [править]
+    text = re.sub(r'\[.*?\]', '', text)
     text = text.replace('править', '').replace('править код', '')
     return " ".join(text.split())
 
 @router.callback_query(F.data == "m_wiki")
 async def wiki_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(WikiStates.waiting_for_query)
-    await callback.message.answer("🔍 <b>База данных Террарии (Wiki.gg)</b>\n\nВведите название предмета, босса или моба на русском:")
+    await callback.message.answer("🔍 <b>База знаний Wiki.gg</b>\n\nВведите название (например: <i>Зенит, Плантера, Мурамаса</i>):", parse_mode="HTML")
 
 @router.message(WikiStates.waiting_for_query)
 async def wiki_fetch(message: types.Message, state: FSMContext):
     user_query = message.text.strip()
-    msg = await message.answer("📡 <i>Считываю архивы...</i>", parse_mode="HTML")
+    msg = await message.answer("📡 <i>Сканирую базу данных...</i>", parse_mode="HTML")
     
     api_url = "https://terraria.wiki.gg/ru/api.php"
     
     try:
-        # 1. Используем API для поиска и получения текста (extract)
-        # Это самый надежный способ получить текст без мусора
-        params = {
+        # 1. Поиск точного заголовка через API
+        search_params = {
             "action": "query",
+            "list": "search",
+            "srsearch": user_query,
             "format": "json",
-            "prop": "extracts|pageimages",
-            "exintro": True,      # Только вступление
-            "explaintext": True,  # Только чистый текст без HTML
-            "titles": user_query,
-            "redirects": 1,       # Авто-переход (плантера -> Плантера)
-            "piprop": "original"
+            "srlimit": 1
         }
+        search_res = requests.get(api_url, params=search_params, headers=HEADERS).json()
         
-        response = requests.get(api_url, params=params, headers=HEADERS, timeout=10).json()
-        pages = response.get("query", {}).get("pages", {})
-        page_id = list(pages.keys())[0]
-
-        # Если по прямому названию не нашли, пробуем глобальный поиск
-        if page_id == "-1":
-            search_params = {
-                "action": "query",
-                "list": "search",
-                "srsearch": user_query,
-                "format": "json",
-                "srlimit": 1
-            }
-            s_res = requests.get(api_url, params=search_params, headers=HEADERS).json()
-            if s_res.get("query", {}).get("search"):
-                user_query = s_res["query"]["search"][0]["title"]
-                # Повторяем запрос с правильным титулом
-                params["titles"] = user_query
-                response = requests.get(api_url, params=params, headers=HEADERS).json()
-                pages = response.get("query", {}).get("pages", {})
-                page_id = list(pages.keys())[0]
-
-        if page_id == "-1":
-            await msg.edit_text("❌ <b>Ничего не найдено.</b> Попробуй другое название.")
+        if not search_res.get("query", {}).get("search"):
+            await msg.edit_text("❌ <b>Предмет не найден.</b> Проверьте название.")
             await state.clear()
             return
 
-        page_data = pages[page_id]
-        title = page_data.get("title", "Информация")
-        description = page_data.get("extract", "")
-
-        # 2. Получаем картинку (через BeautifulSoup, так как API иногда жадничает)
-        img_url = None
-        # Пробуем взять картинку из API
-        if "original" in page_data:
-            img_url = page_data["original"].get("source")
+        page_title = search_res["query"]["search"][0]["title"]
+        page_url = f"https://terraria.wiki.gg/ru/wiki/{page_title.replace(' ', '_')}"
         
-        # Если API не дало картинку, идем парсить страницу
-        if not img_url:
-            page_url = f"https://terraria.wiki.gg/ru/wiki/{title.replace(' ', '_')}"
-            soup_res = requests.get(page_url, headers=HEADERS)
-            soup = BeautifulSoup(soup_res.text, 'lxml')
-            
-            # Ищем в инфобоксе
-            aside = soup.find('aside') or soup.find('table', class_='infobox')
-            if aside:
-                img_tag = aside.find('img')
-                if img_tag:
-                    img_url = img_tag.get('src')
-                    if img_url and img_url.startswith('/'):
-                        img_url = "https://terraria.wiki.gg" + img_url
-
-        # 3. Если API выдало пустой текст, применяем парсинг «План Б»
-        if len(description) < 20:
-            page_url = f"https://terraria.wiki.gg/ru/wiki/{title.replace(' ', '_')}"
-            soup_res = requests.get(page_url, headers=HEADERS)
-            soup = BeautifulSoup(soup_res.text, 'lxml')
-            content = soup.find('div', class_='mw-parser-output')
-            if content:
-                # Удаляем таблицы и инфобоксы
-                for junk in content.find_all(['table', 'aside', 'div']):
+        # 2. Глубокий парсинг страницы
+        response = requests.get(page_url, headers=HEADERS)
+        response.encoding = 'utf-8'
+        soup = BeautifulSoup(response.text, 'lxml')
+        
+        # Удаляем мусор сразу
+        content = soup.find('div', class_='mw-parser-output')
+        if content:
+            for junk in content.find_all(['table', 'aside', 'script', 'style', 'div'], class_=lambda x: x != 'mw-parser-output'):
+                if junk.get('class') and ('infobox' in junk.get('class') or 'navbox' in junk.get('class')):
                     junk.decompose()
-                paragraphs = content.find_all('p')
-                description = ""
-                for p in paragraphs:
-                    txt = clean_text(p.text)
-                    if len(txt) > 40:
-                        description += txt + "\n\n"
-                    if len(description) > 800: break
 
-        # Окончательная сборка сообщения
-        if not description:
-            description = "Описание не найдено, но предмет существует в базе."
+        # 3. Собираем описание (Берем все P, пока не наберем текст)
+        description = ""
+        # Сначала пробуем найти параграфы, которые не пустые
+        paragraphs = content.find_all('p') if content else []
+        
+        for p in paragraphs:
+            txt = clean_text(p.text)
+            if len(txt) > 30:
+                description += txt + "\n\n"
+            if len(description) > 600: # Оптимальная длина для ТГ
+                break
+        
+        # Если параграфы подвели, берем первый попавшийся текст из div
+        if not description.strip() and content:
+            description = clean_text(content.get_text(separator=" ").split("править")[0])[:600] + "..."
 
+        # 4. Поиск картинки (самый надежный способ)
+        img_url = None
+        # Ищем в любой таблице-инфобоксе или просто первую большую картинку
+        img_tag = soup.find('table', class_='infobox')
+        if img_tag:
+            img_tag = img_tag.find('img')
+        
+        if not img_tag:
+            img_tag = soup.find('img', alt=page_title) or soup.find('img')
+
+        if img_tag:
+            img_url = img_tag.get('src')
+            if img_url and img_url.startswith('/'):
+                img_url = "https://terraria.wiki.gg" + img_url
+
+        # Формируем ответ
         builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🏠 Меню", callback_data="to_main"))
-        caption = f"📖 <b>{title.upper()}</b>\n━━━━━━━━━━━━━━\n\n{description[:900]}"
+        caption = f"📖 <b>{page_title.upper()}</b>\n━━━━━━━━━━━━━━\n\n{description}"
 
-        if img_url:
+        if img_url and (img_url.endswith('.png') or img_url.endswith('.jpg')):
             await message.answer_photo(photo=img_url, caption=caption[:1024], reply_markup=builder.as_markup(), parse_mode="HTML")
         else:
             await message.answer(caption[:4096], reply_markup=builder.as_markup(), parse_mode="HTML")
