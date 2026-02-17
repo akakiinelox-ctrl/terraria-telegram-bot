@@ -90,6 +90,7 @@ async def boss_selected(callback: types.CallbackQuery):
     # Навигация
     builder.button(text="⬅️ Назад", callback_data=f"b_l:{stage}")
     builder.button(text="🏠 Домой", callback_data="to_main")
+    builder.button(text="📜 Список", callback_data=f"b_l:{stage}")
     
     # Сетка: 2x2 для меню босса, потом навигация
     builder.adjust(2, 2, 2)
