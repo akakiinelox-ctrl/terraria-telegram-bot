@@ -12,7 +12,6 @@ async def main():
     dp = Dispatcher()
 
     # Подключаем все модули (роутеры)
-    dp.include_router(crafting.router)
     dp.include_router(common.router)
     dp.include_router(npc.router)
     dp.include_router(bosses.router)
