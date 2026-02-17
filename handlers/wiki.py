@@ -17,7 +17,6 @@ def clean_text(text):
     return " ".join(text.split())
 
 async def get_wiki_page_title(query):
-    # Этот запрос к API ищет самую подходящую страницу
     search_url = "https://terraria.fandom.com/ru/api.php"
     params = {
         "action": "query",
@@ -29,7 +28,7 @@ async def get_wiki_page_title(query):
     try:
         r = requests.get(search_url, params=params, timeout=5)
         data = r.json()
-        if data['query']['search']:
+        if 'query' in data and data['query']['search']:
             return data['query']['search'][0]['title']
     except:
         return None
@@ -45,7 +44,6 @@ async def wiki_fetch(message: types.Message, state: FSMContext):
     user_query = message.text.strip()
     msg = await message.answer("📡 <i>Ищу в архивах...</i>", parse_mode="HTML")
     
-    # 1. Сначала находим точное название страницы через API
     correct_title = await get_wiki_page_title(user_query)
     
     if not correct_title:
@@ -53,14 +51,13 @@ async def wiki_fetch(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    # 2. Теперь формируем URL с правильным названием
     url = f"https://terraria.fandom.com/ru/wiki/{correct_title.replace(' ', '_')}"
     
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'lxml')
         
-        # Поиск картинки
+        # 1. Поиск картинки (безопасный)
         img_url = None
         aside = soup.find('aside', class_='portable-infobox')
         if aside:
@@ -68,20 +65,29 @@ async def wiki_fetch(message: types.Message, state: FSMContext):
             if img_tag:
                 img_url = img_tag.get('src')
 
-        # Сбор описания
+        # 2. Поиск контента (добавлена проверка на None)
         content = soup.find('div', class_='mw-parser-output')
-        # Удаляем лишние элементы, чтобы не мешались (таблицы, навигацию)
-        for div in content.find_all(['div', 'table', 'aside']):
-            div.decompose()
+        
+        description = "Описание временно недоступно."
+        
+        if content:
+            # Очищаем контент от мусора перед сбором текста
+            for extra in content.find_all(['div', 'table', 'aside', 'script', 'style']):
+                extra.decompose()
             
-        paragraphs = content.find_all('p', recursive=False)
-        description = ""
-        for p in paragraphs:
-            txt = clean_text(p.text)
-            if len(txt) > 40:
-                description += txt + "\n\n"
-            if len(description) > 800:
-                break
+            paragraphs = content.find_all('p', recursive=False)
+            if paragraphs:
+                temp_desc = ""
+                for p in paragraphs:
+                    txt = clean_text(p.text)
+                    if len(txt) > 40:
+                        temp_desc += txt + "\n\n"
+                    if len(temp_desc) > 800:
+                        break
+                if temp_desc:
+                    description = temp_desc
+        else:
+            description = "Не удалось найти текстовый блок на странице. Возможно, это страница-список."
 
         builder = InlineKeyboardBuilder().row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
         caption = f"📖 <b>{correct_title.upper()}</b>\n━━━━━━━━━━━━━━\n\n{description}"
@@ -94,6 +100,7 @@ async def wiki_fetch(message: types.Message, state: FSMContext):
         await msg.delete()
 
     except Exception as e:
-        await msg.edit_text(f"⚠️ Ошибка: {str(e)}")
+        await msg.edit_text(f"⚠️ <b>Ошибка парсинга:</b> {str(e)}")
+        print(f"Wiki Error: {e}") # Это поможет увидеть ошибку в логах
     
     await state.clear()
