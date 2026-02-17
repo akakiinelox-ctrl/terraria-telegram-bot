@@ -38,7 +38,7 @@ async def bosses_list(callback: types.CallbackQuery):
         builder.row(types.InlineKeyboardButton(text=v['name'], callback_data=f"b_s:{stage}:{k}"))
     
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_bosses"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("🎯 <b>Выберите босса:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
 # ВЫБРАННЫЙ БОСС
@@ -57,7 +57,7 @@ async def boss_selected(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="⚔️ Тактика", callback_data=f"b_f:{stage}:{key}:tactics"),
                 types.InlineKeyboardButton(text="🏟️ Арена", callback_data=f"b_f:{stage}:{key}:arena"))
     builder.row(types.InlineKeyboardButton(text="⬅️ К списку", callback_data=f"b_l:{stage}"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
     await callback.message.edit_text(f"📖 <b>{boss['name']}</b>\n\n{boss.get('general', 'Описание отсутствует')}", reply_markup=builder.as_markup(), parse_mode="HTML")
 
@@ -70,7 +70,8 @@ async def boss_field(callback: types.CallbackQuery):
     
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{stage}:{key}"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Домой", callback_data="to_main"))
+    builder.row(types.InlineKeyboardButton(text="📜 Список боссов", callback_data=f"b_l:{stage}"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text(f"📝 <b>Инфо:</b>\n\n{text}", reply_markup=builder.as_markup(), parse_mode="HTML")
 
 # ВЫБОР КЛАССА
@@ -81,7 +82,12 @@ async def boss_gear(callback: types.CallbackQuery):
     clss = {"warrior": "⚔️ Воин", "ranger": "🎯 Стрелок", "mage": "🔮 Маг", "summoner": "🐍 Призыв"}
     for cid, name in clss.items():
         builder.row(types.InlineKeyboardButton(text=name, callback_data=f"b_gc:{stage}:{key}:{cid}"))
+    
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_s:{stage}:{key}"))
+    # -- ДОБАВЛЕНЫ КНОПКИ НИЖЕ --
+    builder.row(types.InlineKeyboardButton(text="📜 Список боссов", callback_data=f"b_l:{stage}"),
+                types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
+    
     await callback.message.edit_text("🛡️ <b>Выберите ваш класс:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
 # СПИСОК ПРЕДМЕТОВ
@@ -93,7 +99,10 @@ async def boss_gear_list(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     for i, item in enumerate(items):
         builder.row(types.InlineKeyboardButton(text=item['name'], callback_data=f"b_gi:{stage}:{key}:{cid}:{i}"))
+    
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"b_g:{stage}:{key}"))
+    # -- ДОБАВЛЕНА КНОПКА НИЖЕ --
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
     await callback.message.edit_text("🎒 <b>Рекомендуемые предметы:</b>\n<i>(Нажми на предмет, чтобы увидеть крафт)</i>", reply_markup=builder.as_markup(), parse_mode="HTML")
 
@@ -104,4 +113,3 @@ async def boss_item_craft(callback: types.CallbackQuery):
     items = get_data()[stage][key]['classes'][cid]
     item = items[int(index)]
     await callback.answer(f"🛠 Крафт: {item.get('craft', 'Нет данных')}", show_alert=True)
-
