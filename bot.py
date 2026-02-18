@@ -19,7 +19,7 @@ async def main():
 
     # 2. Подключаем роутеры (ПОРЯДОК ВАЖЕН)
     # Сначала все специфические разделы
-    dp.include_router(npc.router)
+    dp.include_router(npcs.router)
     dp.include_router(bosses.router)
     dp.include_router(events.router)
     dp.include_router(classes.router)
