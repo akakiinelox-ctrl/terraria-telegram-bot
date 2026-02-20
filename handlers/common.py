@@ -6,6 +6,29 @@ from aiogram.fsm.context import FSMContext
 router = Router()
 
 @router.message(Command("start"))
+   user_id = str(message.from_user.id)
+    users_file = os.path.join(DATA_PATH, "users.json")
+    
+    # Создаем папку data, если её вдруг нет
+    if not os.path.exists(DATA_PATH):
+        os.makedirs(DATA_PATH)
+
+    # Читаем существующий файл или создаем пустой словарь
+    try:
+        with open(users_file, "r", encoding="utf-8") as f:
+            users_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        users_data = {}
+
+    # Если пользователя еще нет в базе — добавляем его
+    if user_id not in users_data:
+        users_data[user_id] = {
+            "username": message.from_user.username,
+            "first_name": message.from_user.first_name
+        }
+        # Перезаписываем файл с новым пользователем
+        with open(users_file, "w", encoding="utf-8") as f:
+            json.dump(users_data, f, ensure_ascii=False, indent=4)
 @router.callback_query(F.data == "to_main")
 async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
