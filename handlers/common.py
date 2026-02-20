@@ -1,3 +1,5 @@
+import os
+import json
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -5,8 +7,13 @@ from aiogram.fsm.context import FSMContext
 
 router = Router()
 
+# Путь к папке с данными
+DATA_PATH = "data/"
+
 @router.message(Command("start"))
-   user_id = str(message.from_user.id)
+async def cmd_start(message: types.Message, state: FSMContext):
+    # --- Блок сохранения пользователя ---
+    user_id = str(message.from_user.id)
     users_file = os.path.join(DATA_PATH, "users.json")
     
     # Создаем папку data, если её вдруг нет
@@ -29,6 +36,11 @@ router = Router()
         # Перезаписываем файл с новым пользователем
         with open(users_file, "w", encoding="utf-8") as f:
             json.dump(users_data, f, ensure_ascii=False, indent=4)
+            
+    # Вызываем Главное меню после старта
+    await main_menu(message, state)
+
+
 @router.callback_query(F.data == "to_main")
 async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
