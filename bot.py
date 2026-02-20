@@ -8,7 +8,7 @@ from config import TOKEN
 from handlers import (
     common, npc, bosses, events, classes, 
     fishing, alchemy, checklist, calculators, 
-    randomizer, world_seeds, wiki
+    randomizer, world_seeds, wiki, admin
 )
 
 async def main():
@@ -31,6 +31,7 @@ async def main():
     dp.include_router(randomizer.router)
     dp.include_router(world_seeds.router)
     dp.include_router(wiki.router)
+    dp.include_router(admin.router)
     
     # common.router ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ (обрабатывает /start и Главное меню)
     dp.include_router(common.router)
