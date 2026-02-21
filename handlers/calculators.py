@@ -87,12 +87,20 @@ async def ore_list(callback: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("ore_val:"))
 async def ore_input(callback: types.CallbackQuery, state: FSMContext):
-    _, ratio, name = callback.data.split(":")
+    # Добавлен параметр maxsplit=2 (цифра 2)
+    _, ratio, name = callback.data.split(":", 2)
+    
     await state.update_data(ratio=int(ratio), ore_name=name)
     await state.set_state(CalcStates.wait_ore_count)
+    
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🏠 В меню", callback_data="to_main"))
-    await callback.message.answer(f"🔢 <b>Сколько слитков ({name}) тебе нужно?</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    
+    await callback.message.answer(
+        f"🔢 <b>Сколько слитков ({name}) тебе нужно?</b>", 
+        reply_markup=builder.as_markup(), 
+        parse_mode="HTML"
+    )
 
 @router.message(CalcStates.wait_ore_count)
 async def ore_res_calc(message: types.Message, state: FSMContext):
