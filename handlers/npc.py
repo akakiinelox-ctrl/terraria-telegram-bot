@@ -44,8 +44,6 @@ async def npc_menu(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="💎 Гайд по Пилонам", callback_data="n_pylons"))
     builder.row(types.InlineKeyboardButton(text="📋 Список NPC", callback_data="n_list"))
     builder.row(types.InlineKeyboardButton(text="🏠 Советы по домам", callback_data="n_tips"))
-    
-    # Кнопка Домой
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
     await callback.message.edit_text(
@@ -53,6 +51,7 @@ async def npc_menu(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=builder.as_markup(), 
         parse_mode="HTML"
     )
+    await callback.answer()
 
 # --- ГАЙД ПО ПИЛОНАМ ---
 @router.callback_query(F.data == "n_pylons")
@@ -66,6 +65,7 @@ async def pylons_info(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
 
 # --- ЛОГИКА КАЛЬКУЛЯТОРА ---
 def calculate_happiness(npc_name, partners, biome):
@@ -102,6 +102,7 @@ async def nc_step1(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("🏙 <b>Шаг 1: Выберите биом:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_biome)
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("nc_b:"))
 async def nc_step2(callback: types.CallbackQuery, state: FSMContext):
@@ -114,6 +115,7 @@ async def nc_step2(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("👤 <b>Шаг 2: Первый житель:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc1)
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("nc_n1:"))
 async def nc_step3(callback: types.CallbackQuery, state: FSMContext):
@@ -126,6 +128,7 @@ async def nc_step3(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("👥 <b>Шаг 3: Второй сосед:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc2)
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("nc_n2:"))
 async def nc_step4(callback: types.CallbackQuery, state: FSMContext):
@@ -139,6 +142,7 @@ async def nc_step4(callback: types.CallbackQuery, state: FSMContext):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("👥 <b>Шаг 4: Добавить третьего?</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.set_state(NPCCalc.choose_npc3)
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("nc_n3:"))
 async def nc_final(callback: types.CallbackQuery, state: FSMContext):
@@ -162,6 +166,7 @@ async def nc_final(callback: types.CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(res_text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await state.clear()
+    await callback.answer()
 
 # --- СПИСОК ЖИТЕЛЕЙ ---
 @router.callback_query(F.data == "n_list")
@@ -174,7 +179,9 @@ async def npc_list(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text("👤 <b>Выберите жителя:</b>", reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
 
+# --- ИНФОРМАЦИЯ О ЖИТЕЛЕ (с dislikes и hates) ---
 @router.callback_query(F.data.startswith("n_i:"))
 async def npc_info(callback: types.CallbackQuery):
     name = callback.data.split(":")[1]
@@ -185,13 +192,73 @@ async def npc_info(callback: types.CallbackQuery):
         await callback.answer("Ошибка: Житель не найден", show_alert=True)
         return
 
-    txt = (f"👤 <b>{npc['name']}</b>\n\n📥 Приход: {npc.get('arrival', 'Неизвестно')}\n"
-           f"📍 Биом: {npc['biome']}\n❤️ Любит: {npc['loves']}\n😊 Нравится: {npc['likes']}")
-    
+    txt = (
+        f"📜 <b>Информация о {name}</b>\n\n"
+        f"🏠 <b>Приход:</b> {npc.get('arrival', 'Неизвестно')}\n"
+        f"🌍 <b>Биом:</b> {npc['biome']}\n\n"
+        f"❤️ <b>Любит:</b> {npc.get('loves', 'Никого')}\n"
+        f"😊 <b>Нравится:</b> {npc.get('likes', 'Никого')}\n"
+        f"❌ <b>Не любит:</b> {npc.get('dislikes', 'Никого')}\n"
+        f"😡 <b>Ненавидит:</b> {npc.get('hates', 'Никого')}\n\n"
+        f"🎁 <b>Бонус:</b> {npc.get('bonus', '—')}"
+    )
+
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="⬅️ К списку", callback_data="n_list"))
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
-    await callback.message.edit_text(txt, reply_markup=builder.as_markup(), parse_mode="HTML")
 
-    builder.row(types.InlineKeyboardButton(text="Советы по домам", callback_data="n_tips"))
-    await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text(txt, reply_markup=builder.as_markup(), parse_mode="HTML")
+    await callback.answer()
+
+# --- СОВЕТЫ ПО СТРОИТЕЛЬСТВУ ДОМОВ ---
+@router.callback_query(F.data == "n_tips")
+async def npc_tips(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "🏠 <b>Гайд по строительству домов для NPC (1.4.4+)</b>\n\n"
+        "Сейчас покажу всё с примерами и фото. Листай вниз 👇",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+    # Фото-примеры
+    await callback.message.answer_photo(
+        photo="https://static.wikia.nocookie.net/terraria_gamepedia/images/3/31/Valid_House_Door.png/revision/latest",
+        caption="✅ Пример простого валидного дома (9×7)"
+    )
+
+    await callback.message.answer_photo(
+        photo="https://static.wikia.nocookie.net/terraria_gamepedia/images/e/e5/Npccell.png/revision/latest",
+        caption="🟩 Самый маленький дом (3×10)"
+    )
+
+    await callback.message.answer_photo(
+        photo="https://static.wikia.nocookie.net/terraria_gamepedia/images/8/86/Simpliest_Housing.png/revision/latest",
+        caption="🏡 Классический простой дом"
+    )
+
+    tips_text = (
+        "📋 <b>12 главных правил для валидного дома:</b>\n\n"
+        "1. Общая площадь — 60–749 тайлов.\n"
+        "2. Обязательна дверь / trapdoor / tall gate.\n"
+        "3. Background wall (не пустота!).\n"
+        "4. Мебель: 1 Comfort item + 1 Flat surface.\n"
+        "5. Минимум 1 источник света.\n"
+        "6. Минимум 4 пустых тайла пола.\n"
+        "7. Ничего лишнего внутри.\n"
+        "8. Не больше 3 NPC в 120 тайлах.\n"
+        "9. Правильный биом для пилона.\n"
+        "10. Проверяй Housing-кнопкой (должен быть зелёным).\n"
+        "11. Пол/потолок можно из платформ.\n"
+        "12. Любимый биом + любимый сосед = 33% скидки у Гоблина!\n\n"
+        "💡 Для расчёта счастья используй калькулятор выше."
+    )
+
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад в NPC", callback_data="m_npcs"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
+
+    await callback.message.answer(
+        tips_text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
