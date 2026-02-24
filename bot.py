@@ -2,9 +2,9 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 from config import TOKEN
 
-# Импортируем только те файлы, которые РЕАЛЬНО есть в папке handlers на GitHub
 from handlers import (
     common, npc, bosses, events, classes, 
     fishing, alchemy, checklist, calculators, 
@@ -12,14 +12,11 @@ from handlers import (
 )
 
 async def main():
-    # Настройка логирования для Railway
     logging.basicConfig(level=logging.INFO)
 
     bot = Bot(token=TOKEN)
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())   # ← вот это главное исправление
 
-    # ПОДКЛЮЧАЕМ РОУТЕРЫ
-    # Сначала контентные разделы
     dp.include_router(npc.router)
     dp.include_router(bosses.router)
     dp.include_router(events.router)
@@ -33,17 +30,15 @@ async def main():
     dp.include_router(wiki.router)
     dp.include_router(admin.router)
     
-    # common.router ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ (обрабатывает /start и Главное меню)
     dp.include_router(common.router)
 
-    # Очистка старых обновлений
     await bot.delete_webhook(drop_pending_updates=True)
 
-    print("✅ Бот успешно запущен и готов к работе!")
+    print("Бот успешно запущен и готов к работе!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("🛑 Бот выключен.")
+        print("Бот выключен.")
