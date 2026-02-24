@@ -61,10 +61,10 @@ async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContex
     builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"))
     builder.row(types.InlineKeyboardButton(text="🔍 Поиск по Вики", callback_data="m_wiki"))
     
-    # Кнопка поддержки (донат) — в самом низу
+    # Кнопка доната через Stars — в самом низу
     builder.row(types.InlineKeyboardButton(
-        text="❤️ Поддержать бота",
-        callback_data="donate_menu"
+        text="⭐ Поддержать Stars",
+        callback_data="stars_donate"
     ))
 
     text = "🛠 **Terraria Tactical Assistant**\n\nВыбери раздел:"
@@ -76,27 +76,49 @@ async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContex
         await event.answer()
 
 
-@router.callback_query(F.data == "donate_menu")
-async def donate_menu(callback: types.CallbackQuery):
-    text = (
-        "❤️ <b>Поддержать развитие бота</b>\n\n"
-        "Terraria Tactical Assistant создаётся для всех фанатов Terraria бесплатно, "
-        "но поддержка позволяет быстрее добавлять новые фичи, улучшать гайды и держать бота онлайн 24/7.\n\n"
-        "Спасибо огромное каждому, кто помогает! 💙\n\n"
-        "💳 Способы поддержать:\n"
-        "• <a href='https://www.donationalerts.com/r/твоя_ссылка'>DonationAlerts</a> (карты, крипта, QIWI и др.)\n"
-        "• <a href='https://boosty.to/твоя_ссылка'>Boosty</a> (подписка от 100 ₽/мес с эксклюзивом)\n"
-        "• Перевод на карту: 4444 1111 2222 3333 (укажи в комментарии @твой_ник)\n\n"
-        "Любая сумма — это уже огромная мотивация продолжать развивать бота!"
+# Обработчик кнопки "Поддержать Stars" — отправка инвойса
+@router.callback_query(F.data == "stars_donate")
+async def stars_donate(callback: types.CallbackQuery):
+    prices = [
+        types.LabeledPrice(label="Маленькая поддержка", amount=50),     # ~0.75$
+        types.LabeledPrice(label="Средняя поддержка", amount=100),      # ~1.5$
+        types.LabeledPrice(label="Большая поддержка 🔥", amount=500),   # ~7.5$
+    ]
+
+    await callback.bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="Поддержать Terraria Tactical Assistant",
+        description="Спасибо за донат! Это помогает быстрее добавлять новые гайды, фичи и держать бота онлайн 24/7. 💙",
+        payload="donate_thanks_stars",  # Можно использовать для логирования или бонусов
+        provider_token="",              # Обязательно пустая строка для Stars!
+        currency="XTR",                 # Telegram Stars
+        prices=prices,
+        need_name=False,
+        need_phone_number=False,
+        need_email=False,
+        need_shipping_address=False,
+        is_flexible=False,
+        reply_markup=None
+    )
+    await callback.answer("Выбери сумму в Stars ниже ↓")
+
+
+# Обязательный обработчик pre_checkout_query (Telegram требует подтверждения перед оплатой)
+@router.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: types.PreCheckoutQuery):
+    await pre_checkout_query.bot.answer_pre_checkout_query(
+        pre_checkout_query.id,
+        ok=True  # Подтверждаем, что всё ок
     )
 
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="to_main"))
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=builder.as_markup(),
-        parse_mode="HTML",
-        disable_web_page_preview=True
+# Обработчик успешной оплаты — благодарность пользователю
+@router.message(F.successful_payment)
+async def successful_payment_handler(message: types.Message):
+    amount = message.successful_payment.total_amount
+    thanks = (
+        f"❤️ Огромное спасибо за {amount} Stars!\n\n"
+        "Ты реально помогаешь боту жить и развиваться быстрее. "
+        "Если хочешь — напиши, какую фичу добавить следующей (квизы, трекер прогресса, крафт-калькулятор и т.д.)!"
     )
-    await callback.answer()
+    await message.answer(thanks)
