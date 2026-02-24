@@ -60,6 +60,10 @@ async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContex
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"))
     builder.row(types.InlineKeyboardButton(text="🔍 Поиск по Вики", callback_data="m_wiki"))
+        # Кнопка поддержки (донат)
+    builder.row(types.InlineKeyboardButton(
+        text="❤️ Поддержать бота",
+        callback_data="donate_menu"))
 
     text = "🛠 **Terraria Tactical Assistant**\n\nВыбери раздел:"
     
