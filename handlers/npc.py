@@ -42,7 +42,9 @@ async def npc_menu(callback: types.CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья", callback_data="nc_start"))
     builder.row(types.InlineKeyboardButton(text="💎 Гайд по Пилонам", callback_data="n_pylons"))
-    builder.row(types.InlineKeyboardButton(text="🏡 Список NPC", callback_data="n_list"))
+    builder.row(types.InlineKeyboardButton(text="📋 Список NPC", callback_data="n_list"))
+    builder.row(types.InlineKeyboardButton(text="🏠 Советы по домам", callback_data="n_tips"))
+    
     # Кнопка Домой
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     
@@ -191,11 +193,5 @@ async def npc_info(callback: types.CallbackQuery):
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
     await callback.message.edit_text(txt, reply_markup=builder.as_markup(), parse_mode="HTML")
 
-# --- СОВЕТЫ ---
-@router.callback_query(F.data == "n_tips")
-async def npc_tips(callback: types.CallbackQuery):
-    text = "🏡 <b>Советы по счастью:</b>\n1. Не селите больше 3 NPC в одном месте.\n2. Счастье снижает цены на 25%.\n3. Пилон продается при счастье < 90%."
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="⬅️ Назад", callback_data="m_npcs"))
-    builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
+    builder.row(types.InlineKeyboardButton(text="Советы по домам", callback_data="n_tips"))
     await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
