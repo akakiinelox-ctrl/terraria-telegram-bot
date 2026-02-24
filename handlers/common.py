@@ -60,13 +60,23 @@ async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContex
     builder.row(types.InlineKeyboardButton(text="🎲 Мне скучно", callback_data="m_random"))
     builder.row(types.InlineKeyboardButton(text="🌍 Сиды", callback_data="m_seeds"))
     builder.row(types.InlineKeyboardButton(text="🔍 Поиск по Вики", callback_data="m_wiki"))
-        # Кнопка поддержки (донат)
+    
+    # Кнопка поддержки (донат) — в самом низу
     builder.row(types.InlineKeyboardButton(
         text="❤️ Поддержать бота",
-        callback_data="donate_menu"))
+        callback_data="donate_menu"
+    ))
 
     text = "🛠 **Terraria Tactical Assistant**\n\nВыбери раздел:"
-    @router.callback_query(F.data == "donate_menu")
+    
+    if isinstance(event, types.Message):
+        await target.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+    else:
+        await target.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
+        await event.answer()
+
+
+@router.callback_query(F.data == "donate_menu")
 async def donate_menu(callback: types.CallbackQuery):
     text = (
         "❤️ <b>Поддержать развитие бота</b>\n\n"
@@ -90,9 +100,3 @@ async def donate_menu(callback: types.CallbackQuery):
         disable_web_page_preview=True
     )
     await callback.answer()
-    
-    if isinstance(event, types.Message):
-        await target.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
-    else:
-        await target.edit_text(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
-        await event.answer()
