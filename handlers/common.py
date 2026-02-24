@@ -66,6 +66,30 @@ async def main_menu(event: types.Message | types.CallbackQuery, state: FSMContex
         callback_data="donate_menu"))
 
     text = "🛠 **Terraria Tactical Assistant**\n\nВыбери раздел:"
+    @router.callback_query(F.data == "donate_menu")
+async def donate_menu(callback: types.CallbackQuery):
+    text = (
+        "❤️ <b>Поддержать развитие бота</b>\n\n"
+        "Terraria Tactical Assistant создаётся для всех фанатов Terraria бесплатно, "
+        "но поддержка позволяет быстрее добавлять новые фичи, улучшать гайды и держать бота онлайн 24/7.\n\n"
+        "Спасибо огромное каждому, кто помогает! 💙\n\n"
+        "💳 Способы поддержать:\n"
+        "• <a href='https://www.donationalerts.com/r/твоя_ссылка'>DonationAlerts</a> (карты, крипта, QIWI и др.)\n"
+        "• <a href='https://boosty.to/твоя_ссылка'>Boosty</a> (подписка от 100 ₽/мес с эксклюзивом)\n"
+        "• Перевод на карту: 4444 1111 2222 3333 (укажи в комментарии @твой_ник)\n\n"
+        "Любая сумма — это уже огромная мотивация продолжать развивать бота!"
+    )
+
+    builder = InlineKeyboardBuilder()
+    builder.row(types.InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="to_main"))
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+    await callback.answer()
     
     if isinstance(event, types.Message):
         await target.answer(text, reply_markup=builder.as_markup(), parse_mode="Markdown")
