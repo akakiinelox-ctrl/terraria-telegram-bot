@@ -42,7 +42,6 @@ async def npc_menu(callback: types.CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="📊 Калькулятор счастья", callback_data="nc_start"))
     builder.row(types.InlineKeyboardButton(text="💎 Гайд по Пилонам", callback_data="n_pylons"))
-    builder.row(types.InlineKeyboardButton(text="📜 Список жителей", callback_data="n_list"))
     builder.row(types.InlineKeyboardButton(text="🏡 Советы по домам", callback_data="n_tips"))
     # Кнопка Домой
     builder.row(types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="to_main"))
